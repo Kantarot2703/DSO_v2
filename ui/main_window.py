@@ -3,6 +3,7 @@ import re
 import pandas as pd
 from PyQt5 import QtWidgets
 from PyQt5 import QtGui
+from PyQt5 import QtCore
 from ui.pdf_viewer import PDFViewer
 from checklist_loader import load_checklist, start_check
 from pdf_reader import extract_text_by_page
@@ -123,18 +124,66 @@ class DSOApp(QtWidgets.QWidget):
 
         self.display_results(self.result_df)
 
-
     def display_results(self, df: pd.DataFrame):
+        from PyQt5.QtGui import QColor
+        df.fillna("-", inplace=True)
         self.result_table.setRowCount(len(df))
         self.result_table.setColumnCount(len(df.columns))
         self.result_table.setHorizontalHeaderLabels(df.columns.tolist())
+        self.result_table.horizontalHeader().setStretchLastSection(True)
+
+        self.result_table.resizeRowsToContents()
+        self.result_table.resizeColumnsToContents()  # เรียกก่อน setColumnWidth
+
+        try:
+            found_col_index = df.columns.get_loc("Found")
+            self.result_table.setColumnWidth(found_col_index, 110)
+        except ValueError:
+            pass
 
         for row_idx, (_, row) in enumerate(df.iterrows()):
-            for col_idx, value in enumerate(row):
+            found = str(row.get("Found", ""))
+            match = str(row.get("Match", ""))
+            font_size = str(row.get("Font Size", ""))
+            note = str(row.get("Note", ""))
+            term = str(row.get("Term", ""))
+            verification = str(row.get("Verification", "")).strip().lower()
+
+            for col_idx, (header, value) in enumerate(row.items()):
                 item = QtWidgets.QTableWidgetItem(str(value))
-                if str(row.get("Result", "")).startswith("❌"):
+                item.setFlags(QtCore.Qt.ItemIsSelectable | QtCore.Qt.ItemIsEnabled)
+                item.setToolTip(str(value))
+                item.setText(str(value))
+
+                if header in ["Requirement", "Term", "Specification"]:
+                    item.setTextAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
+                else:
+                    item.setTextAlignment(QtCore.Qt.AlignCenter | QtCore.Qt.AlignVCenter)
+
+                if verification == "manual":
+                    if header in ["Found", "Match", "Font Size", "Note"]:
+                        item.setForeground(QColor("gray"))
+                elif header == "Term" and found.startswith("❌"):
                     item.setForeground(QColor("red"))
+                elif header == "Match" and match.startswith("❌"):
+                    item.setForeground(QColor("red"))
+                elif header == "Font Size" and not font_size.startswith("✔"):
+                    item.setForeground(QColor("red"))
+                elif header == "Note" and note.strip() not in ["-", ""]:
+                    item.setForeground(QColor("red"))
+
                 self.result_table.setItem(row_idx, col_idx, item)
+
+        # ปรับขนาดคอลัมน์: 3 คอลัมน์แรกตามเนื้อหา, ที่เหลือกว้างเท่ากัน
+        fixed_width = 110 
+        for col in range(self.result_table.columnCount()):
+            header = df.columns[col]
+            if header in ["Requirement", "Term", "Specification"]:
+                self.result_table.resizeColumnToContents(col)
+            else:
+                self.result_table.setColumnWidth(col, fixed_width)
+
+        self.result_table.resizeRowsToContents()
 
     def export_results(self):
         if self.result_df is None or self.result_df.empty:
