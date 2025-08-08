@@ -19,7 +19,7 @@ def get_strikeout_or_red_text_rows(excel_path, sheet_name, header_row_index):
     ws = wb[sheet_name]
     bad_rows = set()
 
-    for row in ws.iter_rows(min_row=header_row_index + 2):  # ข้าม header
+    for row in ws.iter_rows(min_row=header_row_index + 2):  
         row_index = row[0].row
         for cell in row:
             font = cell.font
