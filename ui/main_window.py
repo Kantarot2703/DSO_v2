@@ -12,14 +12,11 @@ from pdf_reader import extract_product_info_by_page
 from collections import defaultdict
 import logging
 
-logging.basicConfig(level=logging.INFO, format="🔍 [%(levelname)s] %(message)s")
-
-
 
 class DSOApp(QtWidgets.QWidget):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("DSO - Digital Sign Out Checker")
+        self.setWindowTitle("DSO - Digital Sign Off")
         self.setGeometry(100, 100, 1200, 800)
 
         self.excel_path = ""

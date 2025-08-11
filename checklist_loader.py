@@ -8,8 +8,6 @@ from openpyxl.styles.colors import Color
 from collections import defaultdict
 import logging
 
-logging.basicConfig(level=logging.INFO, format="🔍 [%(levelname)s] %(message)s")
-
 
 # Allowed part codes from PDF filenames
 ALLOWED_PART_CODES = ['UU1_DOM', 'DOM', 'UU1', '2LB', '2XV', '4LB', '19L', '19A', '21A', 'DC1']
@@ -52,7 +50,8 @@ def fuzzy_find_columns(df):
     term_col = None
     lang_col = None
     spec_col = None  
-    logging.info("🧾 Columns found in sheet:", list(df.columns))
+    logging.info(f"🧾 Columns found in sheet: {list(df.columns)}")
+
 
     for col in df.columns:
         if pd.isna(col): continue
