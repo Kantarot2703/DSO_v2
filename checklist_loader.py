@@ -52,7 +52,6 @@ def fuzzy_find_columns(df):
     spec_col = None  
     logging.info(f"🧾 Columns found in sheet: {list(df.columns)}")
 
-
     for col in df.columns:
         if pd.isna(col): continue
         col_str = str(col).strip().lower().replace("\xa0", "").replace(" ", "")
@@ -121,9 +120,10 @@ def load_checklist(excel_path, pdf_filename=None):
                 columns_to_ffill = [col for col in df.columns if str(col).strip().lower() in ["requirement", "language"]]
                 df[columns_to_ffill] = df[columns_to_ffill].ffill()
 
+                # Rename Term
                 df = df.rename(columns={term_col: "Term (Text)"})
 
-                # Drop Red+Strike Rows
+                # Drop Red+Strike Rows (ปัจจุบันไม่ได้ใช้ลบ แต่คง log ไว้)
                 bad_row_numbers = get_strikeout_or_red_text_rows(excel_path, sheet_name, header_row_index)
                 logging.info(f"❌ Red+Strike rows from Excel: {bad_row_numbers}")
 
@@ -138,10 +138,9 @@ def load_checklist(excel_path, pdf_filename=None):
                     if term:
                         return True
                     return any(key in requirement for key in manual_keywords_for_load)
-
                 df = df[df.apply(keep_row_even_if_term_missing, axis=1)]
 
-                # Drop columns
+                # Drop columns ที่ไม่ใช้
                 columns_to_exclude = ["Instruction of Play function feature", "Warning statement"]
                 df = df[[col for col in df.columns if col and str(col).strip().lower() not in columns_to_exclude]]
 
@@ -171,6 +170,24 @@ def load_checklist(excel_path, pdf_filename=None):
                         extract_languages_from_remark(remark, term) or ["Unspecified"]
                         for remark, term in zip(df.get("Remark", []), df["Term (Text)"])
                     ]
+
+                 # Image Path (อ่าน path จาก Excel + ทำ absolute)
+                excel_dir = os.path.dirname(excel_path)
+                
+                def _resolve_path(p):
+                    if not isinstance(p, str) or not p.strip():
+                        return ""
+                    p = p.strip().replace("\\", os.sep).replace("/", os.sep)
+                    if os.path.isabs(p):
+                        return p
+                    return os.path.abspath(os.path.join(excel_dir, p))
+
+                if "Image Path" in df.columns:
+                    df["Image Path"] = df["Image Path"].fillna("").astype(str)
+                else:
+                    df["Image Path"] = ""
+
+                df["Image Path Resolved"] = df["Image Path"].apply(_resolve_path)
 
                 return df 
 

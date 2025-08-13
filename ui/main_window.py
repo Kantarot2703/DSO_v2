@@ -1,5 +1,4 @@
-import os
-import re
+import os, re
 import pandas as pd
 from PyQt5 import QtWidgets, QtGui, QtCore
 from ui.pdf_viewer import PDFViewer
@@ -7,15 +6,23 @@ from checklist_loader import load_checklist, start_check
 from pdf_reader import extract_text_by_page
 from checker import check_term_in_page
 from result_exporter import export_result_to_excel
-from PyQt5.QtGui import QColor
+from PyQt5.QtGui import QColor, QIcon
 from pdf_reader import extract_product_info_by_page
 from collections import defaultdict
 import logging
 
 
+APP_ICON_PATH = os.path.join("assets", "app", "dso_icon.ico")
+
 class DSOApp(QtWidgets.QWidget):
     def __init__(self):
         super().__init__()
+
+        try:
+            self.setWindowIcon(QIcon(APP_ICON_PATH))
+        except Exception:
+            pass
+
         self.setWindowTitle("DSO - Digital Sign Off")
         self.setGeometry(100, 100, 1200, 800)
 
@@ -25,6 +32,7 @@ class DSOApp(QtWidgets.QWidget):
         self.pages = None
         self.result_df = None
         self.product_infos = []
+        self._image_cache = {}
 
         self.init_ui()
 
@@ -228,6 +236,29 @@ class DSOApp(QtWidgets.QWidget):
 
         self.result_table.resizeRowsToContents()
 
+        # helper: หา image path จาก self.checklist_df ด้วย (Requirement, Term (Text))
+        def _lookup_image_path(requirement_text: str, term_text: str) -> str:
+            if self.checklist_df is None:
+                return ""
+            req_series = self.checklist_df.get("Requirement")
+            term_series = self.checklist_df.get("Term (Text)")
+            if req_series is None or term_series is None:
+                return ""
+            mask = (
+                req_series.astype(str).str.strip() == str(requirement_text).strip()
+            ) & (
+                term_series.astype(str).str.strip() == str(term_text).strip()
+            )
+            sub = self.checklist_df[mask]
+            if not sub.empty:
+                p = str(sub.iloc[0].get("Image Path Resolved", "") or sub.iloc[0].get("Image Path", "")).strip()
+                return p
+            return ""
+        
+        # แคชภาพ
+        if not hasattr(self, "_image_cache"):
+            self._image_cache = {}
+
         for row_idx, (_, row) in enumerate(df.iterrows()):
             found = str(row.get("Found", ""))
             match = str(row.get("Match", ""))
@@ -236,6 +267,45 @@ class DSOApp(QtWidgets.QWidget):
             verification = str(row.get("Verification", "")).strip().lower()
 
             for col_idx, (header, value) in enumerate(row.items()):
+                # --- BEGIN: render image in Term (Manual only) ---
+                if header == "Term" and verification == "manual":
+                    req_text  = str(row.get("Requirement", "")).strip()
+                    term_text = str(row.get("Term", "")).strip()
+                    img_path  = _lookup_image_path(req_text, term_text)
+
+                    if img_path and os.path.exists(img_path):
+                        # ใช้ cache
+                        if img_path not in self._image_cache:
+                            pm = QtGui.QPixmap(img_path)
+                            if not pm.isNull():
+                                self._image_cache[img_path] = pm.scaledToHeight(48, QtCore.Qt.SmoothTransformation)
+                            else:
+                                self._image_cache[img_path] = QtGui.QPixmap()
+
+                        # ใส่ widget รูปแทนข้อความ
+                        container = QtWidgets.QWidget()
+                        h = QtWidgets.QHBoxLayout(container)
+                        h.setContentsMargins(6, 2, 6, 2)
+
+                        lbl_img = QtWidgets.QLabel()
+                        pm = self._image_cache.get(img_path, QtGui.QPixmap())
+                        if not pm.isNull():
+                            lbl_img.setPixmap(pm)
+                        else:
+                            lbl_img.setText("Image not found")
+
+                        h.addWidget(lbl_img)
+
+                        # ถ้าอยากโชว์คำใน Term ร่วมด้วย ปลดคอมเมนต์:
+                        # if term_text and term_text != "-":
+                        #     lbl_txt = QtWidgets.QLabel(term_text)
+                        #     lbl_txt.setStyleSheet("color:#555;")
+                        #     h.addWidget(lbl_txt)
+
+                        h.addStretch(1)
+                        self.result_table.setCellWidget(row_idx, col_idx, container)
+                        continue 
+
                 item = QtWidgets.QTableWidgetItem(str(value))
                 item.setFlags(QtCore.Qt.ItemIsSelectable | QtCore.Qt.ItemIsEnabled)
                 item.setToolTip(str(value))
