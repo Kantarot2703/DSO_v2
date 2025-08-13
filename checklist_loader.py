@@ -92,7 +92,7 @@ def load_checklist(excel_path, pdf_filename=None):
         sheet_name_normalized = sheet_name.upper().replace(" ", "")
         for code in part_codes:
             if sheet_name_normalized.startswith(code):
-                print(f"✅ Found matching sheet: {sheet_name}")
+                logging.info(f"✅ Found matching sheet: {sheet_name}")
                 df = all_sheets[sheet_name]
 
                 # Header
@@ -117,15 +117,47 @@ def load_checklist(excel_path, pdf_filename=None):
                         lambda x: "-" if pd.isna(x) or str(x).strip().upper() in ["N/A", "NONE", "-"] else str(x)
                     )
 
-                columns_to_ffill = [col for col in df.columns if str(col).strip().lower() in ["requirement", "language"]]
-                df[columns_to_ffill] = df[columns_to_ffill].ffill()
+                # ffill เฉพาะคอลัมน์ที่มีอยู่จริง
+                columns_to_ffill = [c for c in df.columns if str(c).strip().lower() in ["requirement", "language"]]
+                if columns_to_ffill:
+                    df[columns_to_ffill] = df[columns_to_ffill].ffill()
 
-                # Rename Term
-                df = df.rename(columns={term_col: "Term (Text)"})
+                # Rename ถ้า term_col ไม่อยู่ ให้สร้างคอลัมน์ว่างกัน KeyError
+                if term_col in df.columns:
+                    df = df.rename(columns={term_col: "Term (Text)"})
+                elif "Term (Text)" not in df.columns:
+                    df["Term (Text)"] = "-"
 
-                # Drop Red+Strike Rows (ปัจจุบันไม่ได้ใช้ลบ แต่คง log ไว้)
+                # ตัดแถวว่าง/แถวผีหลัง
+                def _clean(s):
+                    return str(s).strip().lower()
+
+                # ชื่อคอลัมน์สำคัญ (บางไฟล์อาจไม่มี spec_col)
+                term_col_safe = "Term (Text)"
+                spec_col_safe = spec_col if spec_col in df.columns else None
+
+                # เงื่อนไขว่าง
+                term_empty  = df[term_col_safe].astype(str).str.strip().isin(["", "-", "nan", "none", "n/a"])
+                if spec_col_safe:
+                    spec_empty  = df[spec_col_safe].astype(str).str.strip().isin(["", "-", "nan", "none", "n/a"])
+                else:
+                    spec_empty  = pd.Series([True] * len(df), index=df.index) # Series ของ True ยาวเท่า df (ให้ผ่านเงื่อนไขนี้ไป)
+
+                # สร้าง Series ว่างสำหรับ Remark ถ้าไม่มีคอลัมน์
+                remark_series = df["Remark"] if "Remark" in df.columns else pd.Series([""] * len(df), index=df.index)
+                remark_empty = remark_series.astype(str).str.strip().isin(["", "-", "nan"])
+
+                # แถวที่ควรเก็บ = อย่างน้อยต้องมี Term หรือ Spec หรือ Remark ไม่ว่าง
+                keep_mask = ~(term_empty & spec_empty & remark_empty)
+                df = df[keep_mask].reset_index(drop=True)
+
+                # กันช่องว่างล้วน (ยกเว้น Requirement/Language) เป็น NaN ล้วน
+                non_struct_cols = [c for c in df.columns if str(c).strip().lower() not in ["requirement", "language"]]
+                df = df[~df[non_struct_cols].isna().all(axis=1)].reset_index(drop=True)
+
+                # Drop Red+Strike Rows (คง log ไว้ แต่ให้เป็น debug)
                 bad_row_numbers = get_strikeout_or_red_text_rows(excel_path, sheet_name, header_row_index)
-                logging.info(f"❌ Red+Strike rows from Excel: {bad_row_numbers}")
+                logging.debug(f"❌ Red+Strike rows from Excel: {bad_row_numbers}")
 
                 df["ExcelRow"] = df.index + header_row_index + 2 
                 df.drop(columns=["ExcelRow"], inplace=True)
@@ -194,6 +226,9 @@ def load_checklist(excel_path, pdf_filename=None):
     raise ValueError("❌ ไม่พบ Sheet ที่ตรงกับ Part code จากชื่อไฟล์ PDF")
 
 def start_check(df_checklist, extracted_text_list):
+
+    logger = logging.getLogger(__name__)
+
     results = []
     all_texts = []
     grouped = defaultdict(list)
@@ -227,6 +262,12 @@ def start_check(df_checklist, extracted_text_list):
             artwork_pages.append(page_items)
             page_mapping[len(artwork_pages)] = real_page_index + 1
 
+    logger.info(
+    "📄 Artwork-like pages considered: %d (real pages: %s)",
+    len(artwork_pages),
+    list(page_mapping.values())
+)
+
     for artwork_index, page_items in enumerate(artwork_pages):
         for item in page_items:
             text_norm = normalize_text(item.get("text", ""))
@@ -249,7 +290,6 @@ def start_check(df_checklist, extracted_text_list):
         term_cell_clean = "-" if term_cell_clean.lower() in ["", "n/a", "none", "unspecified", "nan"] else term_cell_clean
         term_lines = [term_cell_clean] if term_cell_clean != "-" else []
 
-
         # ตรวจ Manual
         is_manual = any(kw in req_norm for kw in manual_keywords)
         if "underline" in spec_norm and not is_manual:
@@ -265,6 +305,22 @@ def start_check(df_checklist, extracted_text_list):
 
         # --- MANUAL SECTION ---
         if is_manual:
+
+            # ข้ามแถวผี (Term ว่าง & Spec ว่าง & Remark ว่าง) ก่อน log
+            remark_str = str(row.get("Remark", "")).strip().lower()
+            is_term_empty = (len(term_lines) == 0)
+            is_spec_empty = (str(spec).strip().lower() in ["", "-", "nan", "none", "n/a"])
+            is_remark_empty = (remark_str in ["", "-", "nan"])
+
+            if is_term_empty and is_spec_empty and is_remark_empty:
+                # ไม่ต้องตรวจ แถวนี้ไม่มีข้อมูลจริง
+                continue
+
+            logger.info(
+                "🟨 [MANUAL] Req: '%s' | Spec: '%s' → Manual verification",
+            requirement, (spec or "-")
+            )
+
             if not term_lines:
                 grouped[(requirement, spec, "Manual")].append({
                     "Term": term_cell_raw,
@@ -307,9 +363,12 @@ def start_check(df_checklist, extracted_text_list):
             match_result = "✔"
             notes = []
 
-            sizes = [float(i.get("size", 0)) for i in matched_items]
-            bolds = [i.get("bold", False) for i in matched_items]
-            underlines = [i.get("underline", False) for i in matched_items]
+            # กัน list ว่าง/แปลงชนิด
+            spec_lower = spec.lower() if isinstance(spec, str) else "-"
+            sizes = [float(i.get("size", 0) or 0) for i in matched_items]
+            max_size = max(sizes) if sizes else 0.0
+            bolds = [bool(i.get("bold", False)) for i in matched_items]
+            underlines = [bool(i.get("underline", False)) for i in matched_items]
             texts = [i.get("text", "") for i in matched_items]
 
             font_size_str = "-"
@@ -318,24 +377,31 @@ def start_check(df_checklist, extracted_text_list):
                 if "bold" in spec.lower() and not any(bolds):
                     match_result = "❌"
                     notes.append("Not Bold")
+
                 if "underline" in spec.lower():
                     if any(underlines):
-                        pass  # มีอย่างน้อย 1 คำขีดเส้นใต้ → ถือว่าผ่าน
+                        pass
                     else:
                         match_result = "❌"
                         notes.append("Underline missing")
+
                 if "all caps" in spec.lower() and not any(t.isupper() for t in texts):
                     match_result = "❌"
                     notes.append("Not All Caps")
 
                 if "≥" in spec:
                     try:
-                        threshold = float(re.findall(r"≥\s*(\d+(?:\.\d+)?)", spec)[0])
-                        if not any(size >= threshold for size in sizes):
-                            match_result = "❌"
-                            notes.append(f"Font < {threshold} mm")
-                        font_size_str = "✔" if match_result == "✔" else f"{round(sizes[0], 2)} mm"
-                    except:
+                        m = re.search(r"≥\s*(\d+(?:\.\d+)?)", spec)
+                        if m:
+                            threshold = float(m.group(1))
+                            if max_size < threshold:
+                                match_result = "❌"
+                                notes.append(f"Font < {threshold} mm")
+                            # โชว์ค่าจริงที่ตรวจเจอ (max) กัน crash index 0
+                            font_size_str = "✔" if match_result == "✔" else f"{round(max_size, 2)} mm"
+                        else:
+                            font_size_str = "-"
+                    except Exception:
                         font_size_str = "-"
                 else:
                     font_size_str = "✔" if match_result == "✔" else "-"
@@ -346,6 +412,13 @@ def start_check(df_checklist, extracted_text_list):
             all_pages = sorted(set(p for _, p, _ in all_texts))
             page_str = "All pages" if set(pages) == set(all_pages) else ", ".join(str(p) for p in pages)
 
+            if found_pages:
+                logger.info("✅ [FOUND] Req: '%s' | Term: '%s' | Pages: %s | Match: %s | Font: %s | Notes: %s",
+                            requirement, term, (page_str or "-"),
+                            match_result, font_size_str, (", ".join(notes) or "-"))
+            else:
+                logger.warning("❌ [NOT FOUND] Req: '%s' | Term tried: '%s'", requirement, term)
+            
             grouped[(requirement, spec, "Verified")].append({
                 "Term": term,
                 "Found": found_flag,
