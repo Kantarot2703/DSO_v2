@@ -1,12 +1,11 @@
-import os
-import re
+import os, io, re
 import pandas as pd
+import logging
 import unicodedata
 from PyQt5.QtCore import Qt
 from openpyxl import load_workbook
 from openpyxl.styles.colors import Color
 from collections import defaultdict
-import logging
 
 
 # Allowed part codes from PDF filenames
@@ -95,6 +94,13 @@ def fuzzy_find_columns(df):
             if (n == "spec") or ("specification" in n) or ("requirement" in n) or ("ข้อกำหนด" in n):
                 spec_col = col
                 break
+
+    # OPTIONAL บังคับตั้งชื่อคอลัมน์ Requirement ถ้าตรวจพบ
+    for c in df.columns:
+        if str(c).strip().lower() == "requirement":
+            if c != "Requirement":
+                df = df.rename(columns={c: "Requirement"})
+            break
 
     logging.info(f"🛟 Fallback columns → Term: {term_col}, Language: {lang_col}, Spec: {spec_col}")
     return term_col, lang_col, spec_col
@@ -301,6 +307,53 @@ def load_checklist(excel_path, pdf_filename=None):
                     logging.debug(f"Remark hyperlink extraction skipped: {_e}")
                     df["Remark Link"] = ""
 
+                # --- RESOLVE absolute paths for Image_Groups and add _HasImage BEFORE filtering ---
+
+                excel_dir = os.path.dirname(excel_path)
+
+                def _resolve_group_paths(groups):
+                    out = []
+                    for g in (groups or []):
+                        paths = []
+                        for p in g.get("paths", []):
+                            if not isinstance(p, str) or not p.strip():
+                                continue
+                            p2 = p.strip().replace("\\", os.sep).replace("/", os.sep)
+                            if not os.path.isabs(p2):
+                                p2 = os.path.abspath(os.path.join(excel_dir, p2))
+                            paths.append(p2)
+                        out.append({"name": g.get("name",""), "mode": (g.get("mode") or "any").lower(), "paths": paths})
+                    return out
+
+                df["Image_Groups_Resolved"] = df["Image_Groups"].apply(_resolve_group_paths)
+
+                def _has_any_image(groups):
+                    if not groups:
+                        return False
+                    for g in groups:
+                        for p in g.get("paths", []):
+                            if isinstance(p, str) and p.strip():
+                                return True
+                    return False
+
+                df["_HasImage"] = df["Image_Groups_Resolved"].apply(_has_any_image)
+
+                # (ถ้ามีคอลัมน์ Image Path แบบเดี่ยว ก็ resolve ให้ด้วย)
+                if "Image Path" in df.columns:
+                    df["Image Path"] = df["Image Path"].fillna("").astype(str)
+                else:
+                    df["Image Path"] = ""
+
+                def _resolve_path(p):
+                    if not isinstance(p, str) or not p.strip():
+                        return ""
+                    p = p.strip().replace("\\", os.sep).replace("/", os.sep)
+                    if os.path.isabs(p):
+                        return p
+                    return os.path.abspath(os.path.join(excel_dir, p))
+
+                df["Image Path Resolved"] = df["Image Path"].apply(_resolve_path)
+                
                 # ตัดแถวว่าง/แถวผีหลัง
                 def _clean(s):
                     return str(s).strip().lower()
@@ -325,7 +378,7 @@ def load_checklist(excel_path, pdf_filename=None):
                 remark_link_empty = remark_link_series.astype(str).str.strip().isin(["", "-", "nan", ""])
 
                 # แถวที่ควรเก็บ = อย่างน้อยต้องมี Term หรือ Spec หรือ Remark ไม่ว่าง
-                keep_mask = ~(term_empty & spec_empty & remark_empty & remark_link_empty)
+                keep_mask = ~(term_empty & spec_empty & remark_empty & remark_link_empty) | df["_HasImage"]
                 df = df[keep_mask].reset_index(drop=True)
 
                 # กันช่องว่างล้วน (ยกเว้น Requirement/Language) เป็น NaN ล้วน
@@ -339,23 +392,16 @@ def load_checklist(excel_path, pdf_filename=None):
                 df["ExcelRow"] = df.index + header_row_index + 2 
                 df.drop(columns=["ExcelRow"], inplace=True)
 
-                # Filter empty Term 
-                manual_keywords_for_load = ["lion", "logo", "symbol", "graphic", "trademark", "warning", "pictogram", "space", "copyright"]
-                def keep_row_even_if_term_missing(row):
-                    term = str(row.get("Symbol/Exact wording", "")).strip()
-                    requirement = str(row.get("Requirement", "")).strip().lower()
-                    if term:
-                        return True
-                    return any(key in requirement for key in manual_keywords_for_load)
-                df = df[df.apply(keep_row_even_if_term_missing, axis=1)]
-
                 # Drop columns ที่ไม่ใช้
                 columns_to_exclude = ["Instruction of Play function feature", "Warning statement"]
                 df = df[[col for col in df.columns if col and str(col).strip().lower() not in columns_to_exclude]]
 
                 # Explode multi-term 
-                df["Symbol/Exact wording"] = df["Symbol/Exact wording"].astype(str)
-                df = df.explode("Symbol/Exact wording", ignore_index=True) if df["Symbol/Exact wording"].apply(lambda x: "\n" in x or "," in x).any() else df
+                df["Symbol/Exact wording"] = df["Symbol/Exact wording"].astype(str).str.replace("\r", "")
+                df["Symbol/Exact wording"] = df["Symbol/Exact wording"].apply(
+                    lambda s: [p.strip() for p in s.split("\n") if p.strip()] if ("\n" in s) else [s.strip()]
+                )
+                df = df.explode("Symbol/Exact wording", ignore_index=True)
 
                 # Language List 
                 if lang_col:
@@ -379,41 +425,6 @@ def load_checklist(excel_path, pdf_filename=None):
                         extract_languages_from_remark(remark, term) or ["Unspecified"]
                         for remark, term in zip(df.get("Remark", []), df["Symbol/Exact wording"])
                     ]
-
-                 # Image Path (อ่าน path จาก Excel + ทำ absolute)
-                excel_dir = os.path.dirname(excel_path)
-                
-                def _resolve_path(p):
-                    if not isinstance(p, str) or not p.strip():
-                        return ""
-                    p = p.strip().replace("\\", os.sep).replace("/", os.sep)
-                    if os.path.isabs(p):
-                        return p
-                    return os.path.abspath(os.path.join(excel_dir, p))
-                
-                # Add Resolve ทุกพาธใน Image_Groups ให้เป็น absolute
-                def _resolve_group_paths(groups):
-                    out = []
-                    for g in (groups or []):
-                        paths = []
-                        for p in g.get("paths", []):
-                            if not isinstance(p, str) or not p.strip():
-                                continue
-                            p2 = p.strip().replace("\\", os.sep).replace("/", os.sep)
-                            if not os.path.isabs(p2):
-                                p2 = os.path.abspath(os.path.join(excel_dir, p2))
-                            paths.append(p2)
-                        out.append({"name": g.get("name",""), "mode": (g.get("mode") or "any").lower(), "paths": paths})
-                    return out
-
-                df["Image_Groups_Resolved"] = df["Image_Groups"].apply(_resolve_group_paths)
-
-                if "Image Path" in df.columns:
-                    df["Image Path"] = df["Image Path"].fillna("").astype(str)
-                else:
-                    df["Image Path"] = ""
-
-                df["Image Path Resolved"] = df["Image Path"].apply(_resolve_path)
 
                 return df 
 
@@ -541,7 +552,7 @@ def start_check(df_checklist, extracted_text_list):
                     })
             continue
 
-        # --- VERIFIED SECTION ---
+        # VERIFIED SECTION
         for term in term_lines:
             term_norm = normalize_text(term)
             if not term_norm or any(kw in term_norm for kw in skip_keywords):

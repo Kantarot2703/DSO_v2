@@ -23,7 +23,7 @@ def extract_text_by_page(pdf_path):
                         "text": text,
                         "bold": span.get("flags", 0) & 2 != 0,
                         "italic": span.get("flags", 0) & 1 != 0,
-                        "underline": "underline" in span.get("font", "").lower(),
+                        "underline": (span.get("flags", 0) & 8) != 0 or ("underline" in span.get("font", "").lower()),
                         "size": span.get("size", 0),
                         "font": span.get("font", "")
                     }

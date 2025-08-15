@@ -179,8 +179,8 @@ class DSOApp(QtWidgets.QWidget):
                     page_items.append(item)
             extracted_text_list.append(page_items)
 
-        # Check each term in the page
-        self.product_infos = extract_product_info_by_page(extracted_text_list)
+            # Check each term in the page
+            self.product_infos = extract_product_info_by_page(extracted_text_list)
 
         self.result_df = start_check(self.checklist_df, extracted_text_list)
 
@@ -192,6 +192,12 @@ class DSOApp(QtWidgets.QWidget):
 
     def display_results(self, df: pd.DataFrame):
         df.fillna("-", inplace=True)
+        # บังคับคอลัมน์แกนหลักให้มีเสมอ
+        base_cols = ["Requirement","Symbol/ Exact wording","Specification",
+                    "Found","Match","Font Size","Pages","Verification",
+                    "Note","Remark","Remark URL"]
+        tail_cols = [c for c in df.columns if c not in base_cols]
+        df = df.reindex(columns=base_cols + tail_cols, fill_value="-")
         self.result_table.setRowCount(len(df))
         self.result_table.setColumnCount(len(df.columns))
         self.result_table.setHorizontalHeaderLabels(df.columns.tolist())
@@ -202,6 +208,11 @@ class DSOApp(QtWidgets.QWidget):
         self.result_table.horizontalHeader().setFont(header_font)
 
         self.update_row_highlight()
+
+        # ซ่อนคอลัมน์ Remark URL (ใช้เป็นแหล่ง URL ให้ Remark เท่านั้น)
+        if "Remark URL" in df.columns:
+            url_idx = df.columns.get_loc("Remark URL")
+            self.result_table.setColumnHidden(url_idx, True)
 
         equal_width = 280 
 
@@ -243,26 +254,47 @@ class DSOApp(QtWidgets.QWidget):
 
         self.result_table.resizeRowsToContents()
 
+        def linkify(text: str) -> str:
+            if not isinstance(text, str):
+                return "-"
+            url_pattern = r'(https?://[^\s]+)'
+            return re.sub(url_pattern, r'<a href="\1">\1</a>', text)
+
         # helper: หา image path จาก self.checklist_df ด้วย (Requirement, Symbol/Exact wording)
         def _lookup_image_groups(requirement_text: str, term_text: str):
             if self.checklist_df is None:
                 return []
-            req_series = self.checklist_df.get("Requirement")
+            req_series  = self.checklist_df.get("Requirement")
             term_series = self.checklist_df.get("Symbol/Exact wording")
-            if req_series is None or term_series is None:
+            if req_series is None:
                 return []
-            mask = (
-                req_series.astype(str).str.strip() == str(requirement_text).strip()
-            ) & (
-                term_series.astype(str).str.strip() == str(term_text).strip()
-            )
-            sub = self.checklist_df[mask]
-            if not sub.empty:
-                g = sub.iloc[0].get("Image_Groups_Resolved", None)  # ใช้ resolved ก่อน
-                if not g:
-                    g = sub.iloc[0].get("Image_Groups", [])
-                return g or []
-            return []
+
+            req_left = req_series.astype(str).str.strip().str.lower()
+
+            # จับคู่ปกติ Req + Term (ถ้า term_text ไม่ใช่ "-" และไม่ว่าง)
+            groups = []
+            if term_series is not None:
+                term_left = term_series.astype(str).str.strip().str.lower()
+                if term_text and term_text.strip() and term_text.strip() != "-":
+                    mask_rt = (req_left == str(requirement_text).strip().lower()) & \
+                            (term_left == str(term_text).strip().lower())
+                    sub = self.checklist_df[mask_rt]
+                    if not sub.empty:
+                        g = sub.iloc[0].get("Image_Groups_Resolved") or sub.iloc[0].get("Image_Groups", [])
+                        groups = g or []
+
+            # ถ้าไม่เจอ และ term_text เป็น "-" ให้ fallback จับคู่ด้วย Requirement อย่างเดียว
+            if not groups:
+                mask_r = (req_left == str(requirement_text).strip().lower())
+                sub_r = self.checklist_df[mask_r]
+                if not sub_r.empty:
+                    # เลือกแถวแรกที่มีภาพจริง
+                    for _, r in sub_r.iterrows():
+                        g = r.get("Image_Groups_Resolved") or r.get("Image_Groups", [])
+                        if g:
+                            groups = g
+                            break
+            return groups or []
 
         # แคชภาพ
         if not hasattr(self, "_image_cache"):
@@ -277,7 +309,7 @@ class DSOApp(QtWidgets.QWidget):
 
             for col_idx, (header, value) in enumerate(row.items()):
                 # --- BEGIN: render grouped images in Term (Manual only) ---
-                if header == "Symbol/ Exact wording" and verification == "manual":
+                if header == "Symbol/ Exact wording":
                     req_text  = str(row.get("Requirement", "")).strip()
                     term_text = str(row.get("Symbol/ Exact wording", "")).strip()
                     groups    = _lookup_image_groups(req_text, term_text)
@@ -326,17 +358,29 @@ class DSOApp(QtWidgets.QWidget):
                         self.result_table.setCellWidget(row_idx, col_idx, container)
                         continue
                 
-                # --- ADD: clickable Remark links ---
+                # Add clickable Remark links
                 if header == "Remark":
                     url = str(row.get("Remark URL", "")).strip()
-                    if url not in ["", "-", "nan", "None"]:
-                        lbl = QtWidgets.QLabel(f'<a href="{url}">{QtCore.QCoreApplication.translate("", str(value))}</a>')
-                        lbl.setTextFormat(QtCore.Qt.RichText)
-                        lbl.setTextInteractionFlags(QtCore.Qt.TextBrowserInteraction)
-                        lbl.setOpenExternalLinks(True)
+                    txt = (str(value) if value is not None else "").strip()
+                    lbl = QtWidgets.QLabel()
+                    lbl.setTextFormat(QtCore.Qt.RichText)
+                    lbl.setWordWrap(True)
+                    lbl.setOpenExternalLinks(True)
+                    lbl.setTextInteractionFlags(QtCore.Qt.TextBrowserInteraction)
+
+                    if url and txt and txt not in ["-", "nan", "None"]:
+                        # ถ้ามี URL จาก Excel + ข้อความ → ใช้ URL เป็น anchor ของทั้งข้อความ
+                        lbl.setText(f'<a href="{url}">{QtCore.QCoreApplication.translate("", txt)}</a>')
                         lbl.setToolTip(url)
-                        self.result_table.setCellWidget(row_idx, col_idx, lbl)
-                        continue
+                    elif url and not txt:
+                        lbl.setText(f'<a href="{url}">{url}</a>')
+                        lbl.setToolTip(url)
+                    else:
+                        # ไม่มี hyperlink จาก Excel → linkify ข้อความเอง
+                        lbl.setText(linkify(txt) if txt else "-")
+
+                    self.result_table.setCellWidget(row_idx, col_idx, lbl)
+                    continue
 
                 item = QtWidgets.QTableWidgetItem(str(value))
                 item.setFlags(QtCore.Qt.ItemIsSelectable | QtCore.Qt.ItemIsEnabled)

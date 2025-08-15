@@ -1,38 +1,38 @@
-2025-08-15 11:10:43,132 | INFO | root | 📂 PDF filename: JCP34_JCP35_LA-CONVENTION_25HW_DOM_A5_Approved.pdf
-2025-08-15 11:10:43,133 | INFO | root | 🧠 Part codes detected: ['DOM']
-2025-08-15 11:10:43,133 | INFO | root | 📄 Sheet names: ['DOM', '4LB']
-2025-08-15 11:10:43,133 | INFO | root | ✅ Found matching sheet: DOM
-2025-08-15 11:10:43,136 | INFO | root | 🧾 Header chosen at row 2 | columns: ['Check list', 'Requirement', 'Symbol/ \nExact wording', 'Specification', 'Package Panel', 'Procedure']...
-2025-08-15 11:10:43,136 | INFO | root | 🧾 Columns found in sheet: ['Check list', 'Requirement', 'Symbol/ \nExact wording', 'Specification', 'Package Panel', 'Procedure', 'Country\n requirement', 'Remark', 'Image Match', 'Image Path']
-2025-08-15 11:10:43,136 | INFO | root | 🛟 Fallback columns → Term: Symbol/ 
+2025-08-15 13:24:38,304 | INFO | root | 📂 PDF filename: JCP34_JCP35_LA-CONVENTION_25HW_DOM_A5_Approved.pdf
+2025-08-15 13:24:38,305 | INFO | root | 🧠 Part codes detected: ['DOM']
+2025-08-15 13:24:38,306 | INFO | root | 📄 Sheet names: ['DOM', '4LB']
+2025-08-15 13:24:38,306 | INFO | root | ✅ Found matching sheet: DOM
+2025-08-15 13:24:38,310 | INFO | root | 🧾 Header chosen at row 2 | columns: ['Check list', 'Requirement', 'Symbol/ \nExact wording', 'Specification', 'Package Panel', 'Procedure']...
+2025-08-15 13:24:38,311 | INFO | root | 🧾 Columns found in sheet: ['Check list', 'Requirement', 'Symbol/ \nExact wording', 'Specification', 'Package Panel', 'Procedure', 'Country\n requirement', 'Remark', 'Image Match', 'Image Path']
+2025-08-15 13:24:38,311 | INFO | root | 🛟 Fallback columns → Term: Symbol/ 
 Exact wording, Language: None, Spec: Requirement
-2025-08-15 11:10:43,136 | INFO | root | 🔎 ใช้คอลัมน์ Term: Symbol/ 
+2025-08-15 13:24:38,312 | INFO | root | 🔎 ใช้คอลัมน์ Term: Symbol/ 
 Exact wording, Language: None, Spec: Requirement
-2025-08-15 11:10:44,888 | INFO | checklist_loader | 📄 Artwork-like pages considered: 2 (real pages: [1, 2])
-2025-08-15 11:10:44,889 | INFO | checklist_loader | ✅ [FOUND] Req: 'Language code' | Term: 'DOM or UU1' | Pages: All pages | Match: ✔ | Font: - | Notes: -
-2025-08-15 11:10:44,889 | WARNING | checklist_loader | ❌ [NOT FOUND] Req: 'Age grade 3+' | Term tried: '3+'
-2025-08-15 11:10:44,890 | INFO | checklist_loader | ✅ [FOUND] Req: 'Country of origin' | Term: 'MADE IN THAILAND' | Pages: All pages | Match: ❌ | Font: - | Notes: Not Bold
-2025-08-15 11:10:44,890 | INFO | checklist_loader | ✅ [FOUND] Req: 'EU address' | Term: 'Manufactured, imported or distributed by:' | Pages: All pages | Match: ✔ | Font: - | Notes: -
-2025-08-15 11:10:44,890 | INFO | checklist_loader | ✅ [FOUND] Req: 'EU address' | Term: 'Mattel Europa B.V., Gondel 1, 1186 MJ Amstelveen, Nederland.' | Pages: All pages | Match: ❌ | Font: - | Notes: Underline Missing
-2025-08-15 11:10:44,891 | INFO | checklist_loader | ✅ [FOUND] Req: 'ASTM requirement
+2025-08-15 13:24:44,122 | INFO | checklist_loader | 📄 Artwork-like pages considered: 2 (real pages: [1, 2])
+2025-08-15 13:24:44,125 | INFO | checklist_loader | ✅ [FOUND] Req: 'Language code' | Term: 'DOM or UU1' | Pages: All pages | Match: ✔ | Font: - | Notes: -
+2025-08-15 13:24:44,126 | WARNING | checklist_loader | ❌ [NOT FOUND] Req: 'Age grade 3+' | Term tried: '3+'
+2025-08-15 13:24:44,127 | INFO | checklist_loader | ✅ [FOUND] Req: 'Country of origin' | Term: 'MADE IN THAILAND' | Pages: All pages | Match: ❌ | Font: - | Notes: Not Bold
+2025-08-15 13:24:44,128 | INFO | checklist_loader | ✅ [FOUND] Req: 'EU address' | Term: 'Manufactured, imported or distributed by:' | Pages: All pages | Match: ✔ | Font: - | Notes: -
+2025-08-15 13:24:44,129 | INFO | checklist_loader | ✅ [FOUND] Req: 'EU address' | Term: 'Mattel Europa B.V., Gondel 1, 1186 MJ Amstelveen, Nederland.' | Pages: All pages | Match: ❌ | Font: - | Notes: Underline Missing
+2025-08-15 13:24:44,130 | INFO | checklist_loader | ✅ [FOUND] Req: 'ASTM requirement
 For 3+ (NOT 14+)' | Term: 'CONFORMS TO THE SAFETY REQUIREMENTS OF ASTM F963.' | Pages: All pages | Match: ✔ | Font: ✔ | Notes: -
-2025-08-15 11:10:44,891 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'Space for Date code' | Spec: 'Must not cover any text and illustration' → Manual verification
-2025-08-15 11:10:44,891 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'Lion mark' | Spec: '≥ 5 mm.' → Manual verification
-2025-08-15 11:10:44,892 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'CE mark' | Spec: '≥ 5 mm.' → Manual verification
-2025-08-15 11:10:44,892 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'UKCA mark' | Spec: '≥ 5 mm.' → Manual verification
-2025-08-15 11:10:44,892 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'MC  mark' | Spec: '≥ 5x5 mm.
+2025-08-15 13:24:44,131 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'Space for Date code' | Spec: 'Must not cover any text and illustration' → Manual verification
+2025-08-15 13:24:44,132 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'Lion mark' | Spec: '≥ 5 mm.' → Manual verification
+2025-08-15 13:24:44,132 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'CE mark' | Spec: '≥ 5 mm.' → Manual verification
+2025-08-15 13:24:44,133 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'UKCA mark' | Spec: '≥ 5 mm.' → Manual verification
+2025-08-15 13:24:44,133 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'MC  mark' | Spec: '≥ 5x5 mm.
 (Exclude numbers under MC )' → Manual verification
-2025-08-15 11:10:44,892 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'CIB 
+2025-08-15 13:24:44,134 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'CIB 
 ( consumer information block)' | Spec: 'must be located near the legal copy' → Manual verification
-2025-08-15 11:10:44,893 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'USA warning statement' | Spec: 'Size as remark column' → Manual verification
-2025-08-15 11:10:44,893 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'International
+2025-08-15 13:24:44,135 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'USA warning statement' | Spec: 'Size as remark column' → Manual verification
+2025-08-15 13:24:44,135 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'International
  warning statement' | Spec: 'SYMBOL ≥ 10 mm
 TEXT ≥ 1.5 mm' → Manual verification
-2025-08-15 11:10:44,893 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'International
+2025-08-15 13:24:44,137 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'International
  warning statement' | Spec: 'SYMBOL ≥ 10 mm
 TEXT ≥ 1.5 mm' → Manual verification
-2025-08-15 11:10:44,894 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'UPC requirement' | Spec: '-' → Manual verification
-2025-08-15 11:10:44,894 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'List of content : Text' | Spec: 'Internation requriement: A list of contents is required when the product is in a closed package where the actual contents are not
+2025-08-15 13:24:44,138 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'UPC requirement' | Spec: '-' → Manual verification
+2025-08-15 13:24:44,138 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'List of content : Text' | Spec: 'Internation requriement: A list of contents is required when the product is in a closed package where the actual contents are not
 visible.' → Manual verification
-2025-08-15 11:10:44,894 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'List of content : 
+2025-08-15 13:24:44,139 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'List of content : 
 pictorial' | Spec: 'Internation requriement:  A pictorial (photo or graphic art) list of contents of the package contents may be used.' → Manual verification
