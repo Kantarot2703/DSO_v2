@@ -10,7 +10,7 @@ import argparse
 APP_ICON_PATH = os.path.join("assets", "app", "dso_icon.ico")
 SPLASH_IMG_PATH = os.path.join("assets", "app", "splash_dso.png")
 
-# [ADD] ให้รูปไอคอนไม่แตกบนจอ HiDPI
+# Add ให้รูปไอคอนไม่แตกบนจอ HiDPI
 QtCore.QCoreApplication.setAttribute(QtCore.Qt.AA_UseHighDpiPixmaps, True)
 
 if sys.platform.startswith("win"):

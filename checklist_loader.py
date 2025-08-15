@@ -50,18 +50,53 @@ def fuzzy_find_columns(df):
     term_col = None
     lang_col = None
     spec_col = None  
+
     logging.info(f"🧾 Columns found in sheet: {list(df.columns)}")
 
+    # add Fallback mapping ถ้า fuzzy หาไม่เจอ
+    def _norm(s: object) -> str:
+         return str(s).replace("\xa0", " ").strip().lower()
+
+    # ตรง Keyword ชัดเจน 
     for col in df.columns:
-        if pd.isna(col): continue
-        col_str = str(col).strip().lower().replace("\xa0", "").replace(" ", "")
-        if any(key in col_str for key in ['term', 'ข้อความ', 'exactwording', 'symbol', 'wording']):
+        if pd.isna(col): 
+            continue
+        n = _norm(col)
+        n_compact = n.replace(" ", "")
+
+        if term_col is None and any(k in n_compact for k in ["term", "ข้อความ", "exactwording", "symbol", "wording"]):
             term_col = col
-        if any(key in col_str for key in ['language', 'lang', 'ภาษา']):
+
+        if lang_col is None and any(k in n_compact for k in ["languagecode", "langcode", "language", "lang", "ภาษา"]):
             lang_col = col
-        if any(key in col_str for key in ['specification', 'requirement', 'ข้อกำหนด']):
+
+        if spec_col is None and any(k in n_compact for k in ["specification", "spec", "requirement", "ข้อกำหนด"]):
             spec_col = col
 
+    # Fallback ผ่อนเงื่อไข
+    if term_col is None:
+        for col in df.columns:
+            n = _norm(col)
+            n_compact = n.replace(" ", "")
+            if any(k in n_compact for k in ["term", "symbol", "exact", "wording"]):
+                term_col = col
+                break
+
+    if lang_col is None:
+        for col in df.columns:
+            n = _norm(col)
+            if ("language" in n) or (n == "lang") or ("language code" in n) or ("lang code" in n):
+                lang_col = col
+                break
+
+    if spec_col is None:
+        for col in df.columns:
+            n = _norm(col)
+            if (n == "spec") or ("specification" in n) or ("requirement" in n) or ("ข้อกำหนด" in n):
+                spec_col = col
+                break
+
+    logging.info(f"🛟 Fallback columns → Term: {term_col}, Language: {lang_col}, Spec: {spec_col}")
     return term_col, lang_col, spec_col
 
 def normalize_text(text):
@@ -95,17 +130,50 @@ def load_checklist(excel_path, pdf_filename=None):
                 logging.info(f"✅ Found matching sheet: {sheet_name}")
                 df = all_sheets[sheet_name]
 
-                # Header
+                HEADER_HINTS = [
+                    r"\brequirement\b",
+                    r"\blanguage\b|\blang\b|\blanguage\s*code\b",
+                    r"\bsymbol\b|\bexact\s*wording\b|\bterm\b",
+                    r"\bspec(ification)?\b",
+                ]
+
+                def _row_score(cells):
+                    score = 0
+                    for c in cells:
+                        s = "" if c is None else str(c).strip()
+                        s_norm = s.lower()
+                        if not s:
+                            continue
+
+                        # ให้แต้มถ้าตรงคีย์เวิร์ดหัวตาราง
+                        if any(re.search(p, s_norm) for p in HEADER_HINTS):
+                            score += 5
+                        # ไม่ใช่ประโยคยาว/มีสัญลักษณ์ = เยอะ
+                        if len(s) <= 24:
+                            score += 1
+                        if "=" in s or "“" in s or "”" in s:
+                            score -= 2
+                    return score
+                
+                # ค้นหา header ภายใน 15 แถวแรก เลือกแถวที่ได้คะแนนมากสุด
                 header_row_index = None
-                for i in range(min(10, len(df))):
-                    if df.iloc[i].notna().sum() >= 2:
+                best_score = -10
+                scan_upto = min(15, len(df))
+                for i in range(scan_upto):
+                    row_vals = list(df.iloc[i].values)
+                    if pd.Series(row_vals).notna().sum() < 2:
+                        continue
+                    sc = _row_score(row_vals)
+                    if sc > best_score:
+                        best_score = sc
                         header_row_index = i
-                        break
+
                 if header_row_index is None:
                     raise ValueError(f"❌ ไม่พบแถว header ที่เหมาะสมใน sheet: {sheet_name}")
-
+                
                 df.columns = df.iloc[header_row_index]
                 df = df[header_row_index + 1:].reset_index(drop=True)
+                logging.info(f"🧾 Header chosen at row {header_row_index+1} | columns: {list(df.columns)[:6]}...")
 
                 # Column Mapping
                 term_col, lang_col, spec_col = fuzzy_find_columns(df)
@@ -124,16 +192,121 @@ def load_checklist(excel_path, pdf_filename=None):
 
                 # Rename ถ้า term_col ไม่อยู่ ให้สร้างคอลัมน์ว่างกัน KeyError
                 if term_col in df.columns:
-                    df = df.rename(columns={term_col: "Term (Text)"})
-                elif "Term (Text)" not in df.columns:
-                    df["Term (Text)"] = "-"
+                    df = df.rename(columns={term_col: "Symbol/Exact wording"})
+                elif "Symbol/Exact wording" not in df.columns:
+                    df["Symbol/Exact wording"] = "-"
+
+                GROUP_RE = re.compile(r"^\s*\[GROUP:\s*(?P<name>.+?)\s*\]\s*\[(?P<mode>ANY|ALL)\]\s*$", re.IGNORECASE)
+
+                def _split_simple_list(cell: str):
+                    """รองรับหลายพาธคั่นด้วย ; | หรือขึ้นบรรทัดใหม่"""
+                    if not isinstance(cell, str):
+                        return []
+                    s = cell.strip()
+                    if not s or s in ["-", "N/A", "None"]:
+                        return []
+                    parts = re.split(r"[;\n|]", s.replace("\r", ""))
+                    return [p.strip().replace("\\", "/") for p in parts if p.strip()]
+                
+                def _parse_image_groups(cell: str):
+                    """
+                    รูปแบบที่รองรับ:
+                    - แบบมี group/tag:
+                        [GROUP: Old logo][ALL]
+                        //server/share/old1.png
+                        //server/share/old2.png
+                        [GROUP: New logo][ANY]
+                        assets/new1.png
+                        assets/new2.png
+                    - แบบธรรมดา: หลายพาธในเซลล์เดียว -> กลุ่มเดียว mode=ANY
+                    - สมมติว่ามีคอลัมน์ Image Match แยก: จะไป normalize ต่อ
+                    """
+                    if not isinstance(cell, str) or not cell.strip():
+                        return []
+                    lines = [ln.strip() for ln in cell.replace("\r", "").split("\n")]
+                    groups, cur = [], None
+                    for ln in lines:
+                        if not ln:
+                            continue
+                        m = GROUP_RE.match(ln)
+                        if m:
+                            if cur and cur["paths"]:
+                                groups.append(cur)
+                            cur = {"name": m.group("name"), "mode": m.group("mode").lower(), "paths": []}
+                        else:
+                            for p in re.split(r"[;|]", ln):
+                                p = p.strip()
+                                if p and p not in ["-", "N/A", "None"]:
+                                    if cur is None:
+                                        cur = {"name": "", "mode": "any", "paths": []}
+                                    cur["paths"].append(p.replace("\\", "/"))
+                    if cur and cur["paths"]:
+                        groups.append(cur)
+
+                    # ถ้าไม่มี [GROUP:...] เลย และมีพาธเดียว/หลายพาธ -> กลุ่มเดียว ANY 
+                    if not groups:
+                        paths = _split_simple_list(cell)
+                        return [{"name": "", "mode": "any", "paths": paths}] if paths else []
+                    return groups
+                
+                def _flatten_paths(groups):
+                    out = []
+                    for g in (groups or []):
+                        out.extend(g.get("paths", []))
+                    return out 
+                
+                # สร้างคอลัมน์ Image_Groups + Image_Paths_Flat
+                if "Image Path" in df.columns:
+                    df["Image_Groups"] = df["Image Path"].fillna("").astype(str).apply(_parse_image_groups)
+                    df["Image_Paths_Flat"] = df["Image_Groups"].apply(_flatten_paths)
+                else:
+                    df["Image_Groups"] = [[] for _ in range(len(df))]
+                    df["Image_Paths_Flat"] = [[] for _ in range(len(df))]
+
+                # หากมีคอลัมน์ Image Match แยก (ANY/ALL) ให้บังคับโหมดกลุ่มเดี่ยวให้ตรงค่านี้
+                if "Image Match" in df.columns:
+                    def _apply_global_mode(groups, mode_cell):
+                        mode = (str(mode_cell).strip().lower() if isinstance(mode_cell, str) else "")
+                        if mode in ["all", "any"]:
+                            # ถ้ามีหลายกลุ่ม จะ apply ให้ทุกกลุ่ม
+                            for g in groups or []:
+                                g["mode"] = mode
+                        return groups
+                    df["Image_Groups"] = [
+                        _apply_global_mode(g, m) for g, m in zip(df["Image_Groups"], df["Image Match"])
+                    ] 
+
+                # Add extract hyperlink targets from Remark cells
+                try:
+                    wb = load_workbook(excel_path, data_only=True)
+                    ws = wb[sheet_name]
+                    # หา index ของคอลัมน์ Remark จาก df.columns
+                    if "Remark" in df.columns:
+                        # ตำแหน่งคอลัมน์ในชีต: +1 เพราะ openpyxl เริ่มที่ 1
+                        remark_col_idx = list(df.columns).index("Remark") + 1
+                        start_row = header_row_index + 2  # แถวแรกของข้อมูลจริงในชีต
+
+                        remark_links = []
+                        for i in range(len(df)):
+                            cell = ws.cell(row=start_row + i, column=remark_col_idx)
+                            url = ""
+                            if cell and cell.hyperlink:
+                                # openpyxl ให้ .hyperlink.target เป็น URL จริง
+                                url = cell.hyperlink.target or ""
+                            remark_links.append(url)
+                        df["Remark Link"] = remark_links
+                    else:
+                        df["Remark Link"] = ""
+                except Exception as _e:
+                    logging.debug(f"Remark hyperlink extraction skipped: {_e}")
+                    df["Remark Link"] = ""
 
                 # ตัดแถวว่าง/แถวผีหลัง
                 def _clean(s):
                     return str(s).strip().lower()
 
                 # ชื่อคอลัมน์สำคัญ (บางไฟล์อาจไม่มี spec_col)
-                term_col_safe = "Term (Text)"
+                term_col_safe = "Symbol/Exact wording"
                 spec_col_safe = spec_col if spec_col in df.columns else None
 
                 # เงื่อนไขว่าง
@@ -147,8 +320,12 @@ def load_checklist(excel_path, pdf_filename=None):
                 remark_series = df["Remark"] if "Remark" in df.columns else pd.Series([""] * len(df), index=df.index)
                 remark_empty = remark_series.astype(str).str.strip().isin(["", "-", "nan"])
 
+                # Add ลิงก์ Remark ก็ถือว่า "มีข้อมูล"
+                remark_link_series = df.get("Remark Link", pd.Series([""] * len(df), index=df.index))
+                remark_link_empty = remark_link_series.astype(str).str.strip().isin(["", "-", "nan", ""])
+
                 # แถวที่ควรเก็บ = อย่างน้อยต้องมี Term หรือ Spec หรือ Remark ไม่ว่าง
-                keep_mask = ~(term_empty & spec_empty & remark_empty)
+                keep_mask = ~(term_empty & spec_empty & remark_empty & remark_link_empty)
                 df = df[keep_mask].reset_index(drop=True)
 
                 # กันช่องว่างล้วน (ยกเว้น Requirement/Language) เป็น NaN ล้วน
@@ -165,7 +342,7 @@ def load_checklist(excel_path, pdf_filename=None):
                 # Filter empty Term 
                 manual_keywords_for_load = ["lion", "logo", "symbol", "graphic", "trademark", "warning", "pictogram", "space", "copyright"]
                 def keep_row_even_if_term_missing(row):
-                    term = str(row.get("Term (Text)", "")).strip()
+                    term = str(row.get("Symbol/Exact wording", "")).strip()
                     requirement = str(row.get("Requirement", "")).strip().lower()
                     if term:
                         return True
@@ -177,8 +354,8 @@ def load_checklist(excel_path, pdf_filename=None):
                 df = df[[col for col in df.columns if col and str(col).strip().lower() not in columns_to_exclude]]
 
                 # Explode multi-term 
-                df["Term (Text)"] = df["Term (Text)"].astype(str)
-                df = df.explode("Term (Text)", ignore_index=True) if df["Term (Text)"].apply(lambda x: "\n" in x or "," in x).any() else df
+                df["Symbol/Exact wording"] = df["Symbol/Exact wording"].astype(str)
+                df = df.explode("Symbol/Exact wording", ignore_index=True) if df["Symbol/Exact wording"].apply(lambda x: "\n" in x or "," in x).any() else df
 
                 # Language List 
                 if lang_col:
@@ -200,7 +377,7 @@ def load_checklist(excel_path, pdf_filename=None):
                         return langs
                     df["Language List"] = [
                         extract_languages_from_remark(remark, term) or ["Unspecified"]
-                        for remark, term in zip(df.get("Remark", []), df["Term (Text)"])
+                        for remark, term in zip(df.get("Remark", []), df["Symbol/Exact wording"])
                     ]
 
                  # Image Path (อ่าน path จาก Excel + ทำ absolute)
@@ -213,6 +390,23 @@ def load_checklist(excel_path, pdf_filename=None):
                     if os.path.isabs(p):
                         return p
                     return os.path.abspath(os.path.join(excel_dir, p))
+                
+                # Add Resolve ทุกพาธใน Image_Groups ให้เป็น absolute
+                def _resolve_group_paths(groups):
+                    out = []
+                    for g in (groups or []):
+                        paths = []
+                        for p in g.get("paths", []):
+                            if not isinstance(p, str) or not p.strip():
+                                continue
+                            p2 = p.strip().replace("\\", os.sep).replace("/", os.sep)
+                            if not os.path.isabs(p2):
+                                p2 = os.path.abspath(os.path.join(excel_dir, p2))
+                            paths.append(p2)
+                        out.append({"name": g.get("name",""), "mode": (g.get("mode") or "any").lower(), "paths": paths})
+                    return out
+
+                df["Image_Groups_Resolved"] = df["Image_Groups"].apply(_resolve_group_paths)
 
                 if "Image Path" in df.columns:
                     df["Image Path"] = df["Image Path"].fillna("").astype(str)
@@ -277,6 +471,8 @@ def start_check(df_checklist, extracted_text_list):
     for idx, row in df_checklist.iterrows():
         requirement = str(row.get("Requirement", "")).strip()
         spec = str(row.get("Specification", "")).strip()
+        remark_text = (str(row.get("Remark", "")) or "").strip()
+        remark_link = (str(row.get("Remark Link", "")) or "").strip()
 
         # Normalize
         req_norm = normalize_text(requirement)
@@ -284,7 +480,7 @@ def start_check(df_checklist, extracted_text_list):
         spec_norm = normalize_text(spec)
 
         # Term (ไม่ดึงค่าจากแถวอื่น)
-        term_raw = row.get("Term (Text)", None)
+        term_raw = row.get("Symbol/Exact wording", None)
         term_cell_raw = str(term_raw) if pd.notna(term_raw) else ""
         term_cell_clean = term_cell_raw.strip()
         term_cell_clean = "-" if term_cell_clean.lower() in ["", "n/a", "none", "unspecified", "nan"] else term_cell_clean
@@ -292,8 +488,6 @@ def start_check(df_checklist, extracted_text_list):
 
         # ตรวจ Manual
         is_manual = any(kw in req_norm for kw in manual_keywords)
-        if "underline" in spec_norm and not is_manual:
-            is_manual = True
 
         # ข้าม row ไม่จำเป็น
         if any(kw in req_norm for kw in skip_keywords) or any(kw in spec_norm for kw in skip_keywords):
@@ -305,7 +499,6 @@ def start_check(df_checklist, extracted_text_list):
 
         # --- MANUAL SECTION ---
         if is_manual:
-
             # ข้ามแถวผี (Term ว่าง & Spec ว่าง & Remark ว่าง) ก่อน log
             remark_str = str(row.get("Remark", "")).strip().lower()
             is_term_empty = (len(term_lines) == 0)
@@ -329,18 +522,22 @@ def start_check(df_checklist, extracted_text_list):
                     "Pages": "-",
                     "Font Size": "-",
                     "Note": "Manual check required",
-                    "Verification": "Manual"
+                    "Verification": "Manual",
+                    "Remark": remark_text,
+                    "Remark URL": remark_link,
                 })
             else:
                 for term in term_lines:
                     grouped[(requirement, spec, "Manual")].append({
-                        "Term": term_cell_raw,
+                        "Term": term,
                         "Found": "-",
                         "Match": "-",
                         "Pages": "-",
                         "Font Size": "-",
                         "Note": "Manual check required",
-                        "Verification": "Manual"
+                        "Verification": "Manual",
+                        "Remark": remark_text,
+                    "Remark URL": remark_link,
                     })
             continue
 
@@ -350,14 +547,35 @@ def start_check(df_checklist, extracted_text_list):
             if not term_norm or any(kw in term_norm for kw in skip_keywords):
                 continue
 
-            term_words = term_norm.split()
+            # รองรับ "or" ใน term เช่น "DOM or UU1"
+            sep = " or "
+            term_variants = [t.strip() for t in term_norm.split(sep)] if sep in term_norm else [term_norm]
+
             found_pages = []
             matched_items = []
+            seen = set () # กันซ้ำด้วย (page_number, id(item))
+            
+            # OR loop
+            for variant in term_variants:
+                if not variant:
+                    continue
+                for text_norm, page_number, item in all_texts:
+                    if variant in text_norm:
+                        key = (page_number, id(item))
+                        if key not in seen:
+                            seen.add(key)
+                            found_pages.append(page_number)
+                            matched_items.append(item)
 
-            for text_norm, page_number, item in all_texts:
-                if any(word in text_norm for word in term_words):
-                    found_pages.append(page_number)
-                    matched_items.append(item)
+            if not found_pages:
+                term_words = term_norm.split()
+                for text_norm, page_number, item in all_texts:
+                    if any(w in text_norm for w in term_words):
+                        key = (page_number, id(item))
+                        if key not in seen:
+                            seen.add(key)
+                            found_pages.append(page_number)
+                            matched_items.append(item)
 
             found_flag = "✅ Found" if found_pages else "❌ Not Found"
             match_result = "✔"
@@ -374,18 +592,20 @@ def start_check(df_checklist, extracted_text_list):
             font_size_str = "-"
 
             if found_pages and matched_items and spec != "-":
-                if "bold" in spec.lower() and not any(bolds):
+                if "bold" in spec_lower and not any(bolds):
                     match_result = "❌"
                     notes.append("Not Bold")
 
-                if "underline" in spec.lower():
+                if "no underline" in spec_lower:
                     if any(underlines):
-                        pass
-                    else:
                         match_result = "❌"
-                        notes.append("Underline missing")
+                        notes.append("Underline must be absent")
+                elif "underline" in spec_lower:
+                    if not any(underlines):
+                        match_result = "❌"
+                        notes.append("Underline Missing")
 
-                if "all caps" in spec.lower() and not any(t.isupper() for t in texts):
+                if "all caps" in spec_lower and not any(t.isupper() for t in texts):
                     match_result = "❌"
                     notes.append("Not All Caps")
 
@@ -426,7 +646,9 @@ def start_check(df_checklist, extracted_text_list):
                 "Pages": page_str if found_flag == "✅ Found" else "-",
                 "Font Size": font_size_str if found_flag == "✅ Found" else "-",
                 "Note": ", ".join(notes) if notes else "-",
-                "Verification": "Verified"
+                "Verification": "Verified",
+                "Remark": remark_text,
+                "Remark URL": remark_link,
             })
 
     final_results = []
@@ -437,8 +659,10 @@ def start_check(df_checklist, extracted_text_list):
                 term_display = "-"
             final_results.append({
                 "Requirement": requirement,
-                "Term": term_display,
+                "Symbol/ Exact wording": term_display,
                 "Specification": spec,
+                "Remark": item.get("Remark", "-"),
+                "Remark URL": item.get("Remark URL", "-"), 
                 "Found": item["Found"],
                 "Match": item["Match"],
                 "Pages": item["Pages"],
