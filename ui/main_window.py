@@ -228,8 +228,9 @@ class DSOApp(QtWidgets.QWidget):
             self.result_table.setColumnWidth(df_ui.columns.get_loc("Specification"), equal_width)
         if "Symbol/ Exact wording" in df_ui.columns:
             self.result_table.setColumnWidth(df_ui.columns.get_loc("Symbol/ Exact wording"), 700)
+        
         if "Remark" in df_ui.columns:
-            self.result_table.setColumnWidth(df_ui.columns.get_loc("Remark"), equal_width)
+            self.result_table.setColumnWidth(df_ui.columns.get_loc("Remark"), 340)
 
         header = self.result_table.horizontalHeader()
         for i in range(df_ui.shape[1]):
@@ -247,6 +248,9 @@ class DSOApp(QtWidgets.QWidget):
         for col in ["Found", "Match", "Font Size", "Note", "Verification"]:
             if col in df_ui.columns:
                         self.result_table.setColumnWidth(df_ui.columns.get_loc(col), ref_width)
+
+            if "Note" in df_ui.columns:
+                self.result_table.setColumnWidth(df_ui.columns.get_loc("Note"), 290)
 
         self.result_table.resizeRowsToContents()
 
@@ -317,8 +321,16 @@ class DSOApp(QtWidgets.QWidget):
                     outer.setContentsMargins(6, 6, 6, 6)
                     outer.setSpacing(8)
 
+                    has_images = bool(groups and any(g.get("paths") for g in groups))
+                    text_clean = term_text if term_text not in ["-", "nan", "None"] else ""
+
+                    if text_clean == "":
+                        term_display = "" if has_images else "-"
+                    else:
+                        term_display = text_clean
+
                     # สร้าง QLabel สำหรับข้อความ
-                    term_label = QtWidgets.QLabel(term_text if term_text else "-")
+                    term_label = QtWidgets.QLabel(term_display)
                     term_label.setWordWrap(True)
 
                     # ตรวจว่าเป็นข้อความบรรทัดเดียวและไม่มีรูป
@@ -366,7 +378,7 @@ class DSOApp(QtWidgets.QWidget):
                                 else:
                                     lbl = QtWidgets.QLabel()
                                     lbl.setAlignment(QtCore.Qt.AlignHCenter)
-                                    lbl.setPixmap(pm.scaledToWidth(360, QtCore.Qt.SmoothTransformation))
+                                    lbl.setPixmap(pm.scaledToWidth(200, QtCore.Qt.SmoothTransformation))
                                     img_vbox.addWidget(lbl, 0, QtCore.Qt.AlignHCenter)
 
                             outer.addWidget(img_wrap, 0, QtCore.Qt.AlignHCenter)
