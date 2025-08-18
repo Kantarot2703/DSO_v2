@@ -191,78 +191,74 @@ class DSOApp(QtWidgets.QWidget):
         self.display_results(self.result_df)
 
     def display_results(self, df: pd.DataFrame):
+        df_src = df.copy()
         df.fillna("-", inplace=True)
         # บังคับคอลัมน์แกนหลักให้มีเสมอ
-        base_cols = ["Requirement","Symbol/ Exact wording","Specification",
-                    "Found","Match","Font Size","Pages","Verification",
-                    "Note","Remark","Remark URL"]
-        tail_cols = [c for c in df.columns if c not in base_cols]
-        df = df.reindex(columns=base_cols + tail_cols, fill_value="-")
-        self.result_table.setRowCount(len(df))
-        self.result_table.setColumnCount(len(df.columns))
-        self.result_table.setHorizontalHeaderLabels(df.columns.tolist())
+        preferred = ["Requirement", "Symbol/ Exact wording", "Specification", 
+                    "Remark", "Found", "Match", "Font Size", "Pages",
+                    "Note", "Verification"]
+        
+        # helper column ที่ไม่แสดงใน UI แต่ยังแสดงใน df_scr
+        helper_names = {"remark url", "remark link"}
+        helper_cols = [ c for c in df.columns if c.strip().lower() in helper_names]
+
+        # จัดลำดับเฉพาะคอลัมน์ที่จะแสดง (ไม่รวม helper)
+        ordered = [ c for c in preferred if c in df.columns]
+        tail = [c for c in df.columns if c not in ordered + helper_cols]
+        df_ui = df.loc[:, ordered + tail]
+
+        # ตั้งค่าตาราง
+        self.result_table.setRowCount(len(df_ui))
+        self.result_table.setColumnCount(len(df_ui.columns))
+        self.result_table.setHorizontalHeaderLabels(df_ui.columns.tolist())
 
         # Bold header font
         header_font = self.result_table.horizontalHeader().font()
         header_font.setBold(True)
         self.result_table.horizontalHeader().setFont(header_font)
 
-        self.update_row_highlight()
+        if hasattr(self, "update_row_highlight"):
+            self.update_row_highlight()
 
-        # ซ่อนคอลัมน์ Remark URL (ใช้เป็นแหล่ง URL ให้ Remark เท่านั้น)
-        if "Remark URL" in df.columns:
-            url_idx = df.columns.get_loc("Remark URL")
-            self.result_table.setColumnHidden(url_idx, True)
-
-        equal_width = 280 
-
-        if "Requirement" in df.columns:
-            req_index = df.columns.get_loc("Requirement")
-            self.result_table.setColumnWidth(req_index, equal_width)
-
-        if "Specification" in df.columns:
-            spec_index = df.columns.get_loc("Specification")
-            self.result_table.setColumnWidth(spec_index, equal_width)
-
-        if "Symbol/ Exact wording" in df.columns:
-            term_index = df.columns.get_loc("Symbol/ Exact wording")
-            self.result_table.setColumnWidth(term_index, 700)
-
-        # ให้ Remark กว้างพอ ๆ กับ Spec
-        if "Remark" in df.columns:
-            remark_index = df.columns.get_loc("Remark")
-            self.result_table.setColumnWidth(remark_index, equal_width)
+        # ตั้งความกว้างหลัก
+        equal_width = 280
+        if "Requirement" in df_ui.columns:
+            self.result_table.setColumnWidth(df_ui.columns.get_loc("Requirement"), equal_width)
+        if "Specification" in df_ui.columns:
+            self.result_table.setColumnWidth(df_ui.columns.get_loc("Specification"), equal_width)
+        if "Symbol/ Exact wording" in df_ui.columns:
+            self.result_table.setColumnWidth(df_ui.columns.get_loc("Symbol/ Exact wording"), 700)
+        if "Remark" in df_ui.columns:
+            self.result_table.setColumnWidth(df_ui.columns.get_loc("Remark"), equal_width)
 
         header = self.result_table.horizontalHeader()
-        for i in range(df.shape[1]):
+        for i in range(df_ui.shape[1]):
             header.setSectionResizeMode(i, QtWidgets.QHeaderView.Fixed)
 
         try:
-            if "Pages" in df.columns:
-                page_index = df.columns.get_loc("Pages")
+            if "Pages" in df_ui.columns:
+                page_index = df_ui.columns.get_loc("Pages")
                 ref_width = self.result_table.columnWidth(page_index)
+            else:
+                ref_width = 120
         except ValueError:
             ref_width = 120
 
-        fixed_columns = ["Found", "Match", "Font Size", "Note", "Verification"]
-        for col in fixed_columns:
-            try:
-                idx = df.columns.get_loc(col)
-                self.result_table.setColumnWidth(idx, ref_width)
-            except ValueError:
-                pass
+        for col in ["Found", "Match", "Font Size", "Note", "Verification"]:
+            if col in df_ui.columns:
+                        self.result_table.setColumnWidth(df_ui.columns.get_loc(col), ref_width)
 
         self.result_table.resizeRowsToContents()
 
+        # helpers
         def linkify(text: str) -> str:
-            if not isinstance(text, str):
+            if not isinstance(text, str) or not text:
                 return "-"
-            url_pattern = r'(https?://[^\s]+)'
-            return re.sub(url_pattern, r'<a href="\1">\1</a>', text)
+            return re.sub(r'(https?://[^\s]+)', r'<a href="\1">\1</a>', text)
 
-        # helper: หา image path จาก self.checklist_df ด้วย (Requirement, Symbol/Exact wording)
+        # หา image path จาก self.checklist_df ด้วย (Requirement, Symbol/Exact wording)
         def _lookup_image_groups(requirement_text: str, term_text: str):
-            if self.checklist_df is None:
+            if getattr(self, "checklist_df", None) is None:
                 return []
             req_series  = self.checklist_df.get("Requirement")
             term_series = self.checklist_df.get("Symbol/Exact wording")
@@ -270,9 +266,8 @@ class DSOApp(QtWidgets.QWidget):
                 return []
 
             req_left = req_series.astype(str).str.strip().str.lower()
-
-            # จับคู่ปกติ Req + Term (ถ้า term_text ไม่ใช่ "-" และไม่ว่าง)
             groups = []
+
             if term_series is not None:
                 term_left = term_series.astype(str).str.strip().str.lower()
                 if term_text and term_text.strip() and term_text.strip() != "-":
@@ -288,7 +283,6 @@ class DSOApp(QtWidgets.QWidget):
                 mask_r = (req_left == str(requirement_text).strip().lower())
                 sub_r = self.checklist_df[mask_r]
                 if not sub_r.empty:
-                    # เลือกแถวแรกที่มีภาพจริง
                     for _, r in sub_r.iterrows():
                         g = r.get("Image_Groups_Resolved") or r.get("Image_Groups", [])
                         if g:
@@ -300,68 +294,91 @@ class DSOApp(QtWidgets.QWidget):
         if not hasattr(self, "_image_cache"):
             self._image_cache = {}
 
-        for row_idx, (_, row) in enumerate(df.iterrows()):
-            found = str(row.get("Found", ""))
-            match = str(row.get("Match", ""))
-            font_size = str(row.get("Font Size", ""))
-            note = str(row.get("Note", ""))
-            verification = str(row.get("Verification", "")).strip().lower()
+        for row_idx in range(len(df_ui)):
+            row_ui  = df_ui.iloc[row_idx]   
+            row_src = df_src.iloc[row_idx]     
 
-            for col_idx, (header, value) in enumerate(row.items()):
-                # --- BEGIN: render grouped images in Term (Manual only) ---
+            found        = str(row_ui.get("Found", ""))
+            match        = str(row_ui.get("Match", ""))
+            font_size    = str(row_ui.get("Font Size", ""))
+            note         = str(row_ui.get("Note", ""))
+            verification = str(row_ui.get("Verification", "")).strip().lower()
+
+            for col_idx, header in enumerate(df_ui.columns):
+                value = row_ui.get(header, "-")
+
                 if header == "Symbol/ Exact wording":
-                    req_text  = str(row.get("Requirement", "")).strip()
-                    term_text = str(row.get("Symbol/ Exact wording", "")).strip()
+                    req_text  = str(row_src.get("Requirement", "")).strip()
+                    term_text = str(value).strip()
                     groups    = _lookup_image_groups(req_text, term_text)
 
+                    container = QtWidgets.QWidget()
+                    outer = QtWidgets.QVBoxLayout(container)
+                    outer.setContentsMargins(6, 6, 6, 6)
+                    outer.setSpacing(8)
+
+                    # สร้าง QLabel สำหรับข้อความ
+                    term_label = QtWidgets.QLabel(term_text if term_text else "-")
+                    term_label.setWordWrap(True)
+
+                    # ตรวจว่าเป็นข้อความบรรทัดเดียวและไม่มีรูป
+                    single_line = ("\n" not in term_text) and (len(term_text) > 0)
+                    has_images  = bool(groups and any(g.get("paths") for g in groups))
+
+                    if single_line and not has_images:
+                        term_label.setAlignment(QtCore.Qt.AlignHCenter | QtCore.Qt.AlignVCenter)
+                        outer.addStretch(1)
+                        outer.addWidget(term_label, 0, QtCore.Qt.AlignHCenter)
+                        outer.addStretch(1)
+                    else:
+                        term_label.setAlignment(QtCore.Qt.AlignHCenter | QtCore.Qt.AlignTop)
+                        outer.addWidget(term_label, 0, QtCore.Qt.AlignHCenter)
+
+                    # รูปล่าง(กึ่งกลาง + margin บน-ล่าง)
                     if groups:
-                        container = QtWidgets.QWidget()
-                        outer = QtWidgets.QVBoxLayout(container)
-                        outer.setContentsMargins(6, 2, 6, 2); outer.setSpacing(6)
-
-                        # แสดงกฎของกลุ่มแรกแบบสั้น (ANY/ALL)
-                        mode = (groups[0].get("mode") or "any").lower()
-                        rule = "(Rule: Need BOTH)" if mode == "all" else "(Rule: Choose ONE)"
-                        head = QtWidgets.QLabel(f"{term_text}  {rule}")
-                        head.setStyleSheet("font-weight:600;color:#333;")
-                        outer.addWidget(head)
-
-                        # วาดเป็นกริด 2 รูป/แถว
-                        grid = QtWidgets.QGridLayout(); grid.setContentsMargins(0,0,0,0)
-                        grid.setHorizontalSpacing(10); grid.setVerticalSpacing(10)
-
-                        # รวมพาธทั้งหมดจากทุกกลุ่ม (ถ้าต้องการแยกกลุ่ม ให้ลูปทีละ g)
                         paths = []
                         for g in groups:
                             paths.extend(g.get("paths", []))
 
-                        for i, p in enumerate(paths):
-                            if not p: 
-                                continue
-                            # cache
-                            pm = self._image_cache.get(p)
-                            if pm is None:
-                                qpm = QtGui.QPixmap(p)
-                                pm = qpm if not qpm.isNull() else None
-                                self._image_cache[p] = pm if pm else QtGui.QPixmap()
-                            if not pm:
-                                miss = QtWidgets.QLabel(f"[!] Missing image: {p}")
-                                miss.setStyleSheet("color:#b91c1c;")
-                                grid.addWidget(miss, i//2, i%2)
-                            else:
-                                lbl = QtWidgets.QLabel()
-                                lbl.setPixmap(pm.scaledToWidth(220, QtCore.Qt.SmoothTransformation))
-                                lbl.setAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignTop)
-                                grid.addWidget(lbl, i//2, i%2)
+                        if not hasattr(self, "_image_cache"):
+                            self._image_cache = {}
 
-                        outer.addLayout(grid)
-                        self.result_table.setCellWidget(row_idx, col_idx, container)
-                        continue
-                
-                # Add clickable Remark links
+                        if paths:
+                            img_wrap = QtWidgets.QWidget()
+                            img_vbox = QtWidgets.QVBoxLayout(img_wrap)
+                            img_vbox.setContentsMargins(0, 8, 0, 8)  
+                            img_vbox.setSpacing(8)
+
+                            for p in paths:
+                                if not p:
+                                    continue
+                                pm = self._image_cache.get(p)
+                                if pm is None:
+                                    qpm = QtGui.QPixmap(p)
+                                    pm = qpm if not qpm.isNull() else None
+                                    self._image_cache[p] = pm if pm else QtGui.QPixmap()
+
+                                if not pm:
+                                    miss = QtWidgets.QLabel(f"[!] Missing image: {p}")
+                                    miss.setStyleSheet("color:#b91c1c;")
+                                    miss.setAlignment(QtCore.Qt.AlignHCenter)
+                                    img_vbox.addWidget(miss, 0, QtCore.Qt.AlignHCenter)
+                                else:
+                                    lbl = QtWidgets.QLabel()
+                                    lbl.setAlignment(QtCore.Qt.AlignHCenter)
+                                    lbl.setPixmap(pm.scaledToWidth(360, QtCore.Qt.SmoothTransformation))
+                                    img_vbox.addWidget(lbl, 0, QtCore.Qt.AlignHCenter)
+
+                            outer.addWidget(img_wrap, 0, QtCore.Qt.AlignHCenter)
+
+                    self.result_table.setCellWidget(row_idx, col_idx, container)
+                    continue
+
+                # Remark คอลัมน์เดียว แต่คลิกได้ถ้ามีลิงก์จาก Excel; ถ้าไม่มีให้ linkify/หรือ "-" ; จัดกึ่งกลาง 
                 if header == "Remark":
-                    url = str(row.get("Remark URL", "")).strip()
+                    url = str(row_src.get("Remark URL", "") or row_src.get("Remark Link", "") or "").strip()
                     txt = (str(value) if value is not None else "").strip()
+
                     lbl = QtWidgets.QLabel()
                     lbl.setTextFormat(QtCore.Qt.RichText)
                     lbl.setWordWrap(True)
@@ -369,40 +386,40 @@ class DSOApp(QtWidgets.QWidget):
                     lbl.setTextInteractionFlags(QtCore.Qt.TextBrowserInteraction)
 
                     if url and txt and txt not in ["-", "nan", "None"]:
-                        # ถ้ามี URL จาก Excel + ข้อความ → ใช้ URL เป็น anchor ของทั้งข้อความ
                         lbl.setText(f'<a href="{url}">{QtCore.QCoreApplication.translate("", txt)}</a>')
                         lbl.setToolTip(url)
                     elif url and not txt:
                         lbl.setText(f'<a href="{url}">{url}</a>')
                         lbl.setToolTip(url)
                     else:
-                        # ไม่มี hyperlink จาก Excel → linkify ข้อความเอง
+                        def linkify(s: str) -> str:
+                            if not s:
+                                return "-"
+                            return re.sub(r'(https?://[^\s]+)', r'<a href="\1">\1</a>', s)
                         lbl.setText(linkify(txt) if txt else "-")
 
+                    lbl.setAlignment(QtCore.Qt.AlignHCenter | QtCore.Qt.AlignVCenter)
                     self.result_table.setCellWidget(row_idx, col_idx, lbl)
                     continue
 
+                # คอลัมน์อื่นๆ 
                 item = QtWidgets.QTableWidgetItem(str(value))
                 item.setFlags(QtCore.Qt.ItemIsSelectable | QtCore.Qt.ItemIsEnabled)
                 item.setToolTip(str(value))
                 item.setText(str(value))
 
-                # Alignment and styling based on header
+                # Alignment: Requirement = ซ้าย/หนา, อื่นๆ = กึ่งกลาง
                 if header == "Requirement":
                     item.setTextAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
-                    font = item.font()
-                    font.setBold(True)
-                    item.setFont(font)
-                elif header in ["Symbol/ Exact wording", "Specification", "Remark"]:
-                    item.setTextAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
+                    f = item.font(); f.setBold(True); item.setFont(f)
                 else:
-                    item.setTextAlignment(QtCore.Qt.AlignCenter | QtCore.Qt.AlignVCenter)
-
+                    item.setTextAlignment(QtCore.Qt.AlignHCenter | QtCore.Qt.AlignVCenter)
+                
+                # สีตามสถานะ (คง logic เดิม)
                 if verification == "manual":
                     item.setBackground(QColor("#fff9cc"))
                     if header in ["Found", "Match", "Font Size", "Note"]:
                         item.setForeground(QColor("gray"))
-
                 elif header == "Symbol/ Exact wording" and found.startswith("❌"):
                     item.setForeground(QColor("red"))
                 elif header == "Match" and match.startswith("❌"):
@@ -414,7 +431,7 @@ class DSOApp(QtWidgets.QWidget):
 
                 self.result_table.setItem(row_idx, col_idx, item)
 
-        self.result_table.resizeRowsToContents()
+            self.result_table.resizeRowsToContents()
 
     def export_results(self):
         if self.result_df is None or self.result_df.empty:

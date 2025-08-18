@@ -11,6 +11,33 @@ from collections import defaultdict
 # Allowed part codes from PDF filenames
 ALLOWED_PART_CODES = ['UU1_DOM', 'DOM', 'UU1', '2LB', '2XV', '4LB', '19L', '19A', '21A', 'DC1']
 
+def normalize_headers(df):
+    rename = {}
+    for col in df.columns:
+        name = str(col).strip().lower()
+        # Requirement
+        if ("require" in name) or ("ข้อกำหนด" in name) or ("หัวข้อ" in name):
+            rename[col] = "Requirement"
+            continue
+        # Term
+        if ("symbol" in name) or ("exact" in name) or ("term" in name):
+            rename[col] = "Symbol/ Exact wording"
+            continue
+        # Spec
+        if ("spec" in name) or ("specification" in name):
+            rename[col] = "Specification"
+            continue
+        # Remark
+        if ("remark" in name) or ("หมายเหตุ" in name):
+            rename[col] = "Remark"
+            continue
+        # (ปล่อยคอลัมน์อื่นตามเดิม)
+    df = df.rename(columns=rename)
+    # กันพลาด: ถ้าไม่มี Requirement จริง ให้ fail ชัดเจน
+    if "Requirement" not in df.columns:
+        raise ValueError("Checklist Excel must contain a column recognizable as 'Requirement'.")
+    return df
+
 def get_strikeout_or_red_text_rows(excel_path, sheet_name, header_row_index):
     wb = load_workbook(excel_path)
     ws = wb[sheet_name]
@@ -439,7 +466,6 @@ def start_check(df_checklist, extracted_text_list):
     grouped = defaultdict(list)
 
     skip_keywords = [
-        "instruction", "play function feature", "function feature",
         "do not print", "do not forget", "see template", "don't forget",
         "for reference", "note", "click", "reminder", "refer template", "remove from template", "remove from mb legal template"
     ]
@@ -504,21 +530,46 @@ def start_check(df_checklist, extracted_text_list):
         if any(kw in req_norm for kw in skip_keywords) or any(kw in spec_norm for kw in skip_keywords):
             continue
 
-        # Verified แต่ไม่มี Term → ข้าม
-        if not is_manual and not term_lines:
-            continue
+        # VERIFIED SECTION
+        if not is_manual:
+            if not term_lines:
+                has_image = bool(row.get("_HasImage", False))
+                if has_image:
+                    grouped[(requirement, spec, "Manual")].append({
+                        "Term": "-",
+                        "Remark": remark_text or "-",
+                        "Remark URL": remark_link or "-",
+                        "Found": "❌ Not Found",
+                        "Match": "❌",
+                        "Pages": "-",
+                        "Font Size": "-",
+                        "Note": "Image mapping only (no text term)"
+                    })
+                    continue 
+                continue
 
         # --- MANUAL SECTION ---
         if is_manual:
-            # ข้ามแถวผี (Term ว่าง & Spec ว่าง & Remark ว่าง) ก่อน log
             remark_str = str(row.get("Remark", "")).strip().lower()
-            is_term_empty = (len(term_lines) == 0)
-            is_spec_empty = (str(spec).strip().lower() in ["", "-", "nan", "none", "n/a"])
+            is_term_empty   = (len(term_lines) == 0)
+            is_spec_empty   = (str(spec)).strip().lower() in ["", "-", "nan", "none", "null"]
             is_remark_empty = (remark_str in ["", "-", "nan"])
 
             if is_term_empty and is_spec_empty and is_remark_empty:
-                # ไม่ต้องตรวจ แถวนี้ไม่มีข้อมูลจริง
-                continue
+                if bool(row.get("_HasImage", False)):
+                    grouped[(requirement, spec, "Manual")].append({
+                        "Term": "-",
+                        "Remark": remark_text or "-",
+                        "Remark URL": remark_link or "-",
+                        "Found": "❌ Not Found",
+                        "Match": "❌",
+                        "Pages": "-",
+                        "Font Size": "-",
+                        "Note": "Image mapping only (manual; empty text fields)"
+                    })
+                    continue
+                else:
+                    continue
 
             logger.info(
                 "🟨 [MANUAL] Req: '%s' | Spec: '%s' → Manual verification",
@@ -540,14 +591,14 @@ def start_check(df_checklist, extracted_text_list):
             else:
                 for term in term_lines:
                     grouped[(requirement, spec, "Manual")].append({
-                        "Term": term,
-                        "Found": "-",
-                        "Match": "-",
-                        "Pages": "-",
-                        "Font Size": "-",
-                        "Note": "Manual check required",
-                        "Verification": "Manual",
-                        "Remark": remark_text,
+                    "Term": term,
+                    "Found": "-",
+                    "Match": "-",
+                    "Pages": "-",
+                    "Font Size": "-",
+                    "Note": "Manual check required",
+                    "Verification": "Manual",
+                    "Remark": remark_text,
                     "Remark URL": remark_link,
                     })
             continue
