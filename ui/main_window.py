@@ -194,8 +194,8 @@ class DSOApp(QtWidgets.QWidget):
         df_src = df.copy()
         df.fillna("-", inplace=True)
         # บังคับคอลัมน์แกนหลักให้มีเสมอ
-        preferred = ["Requirement", "Symbol/ Exact wording", "Specification", "Package Panel"
-                    "Procedure", "Remark", "Found", "Match", 
+        preferred = ["Requirement", "Symbol/ Exact wording", "Specification", 
+                    "Package Panel", "Procedure", "Remark", "Found", "Match", 
                     "Font Size", "Pages", "Note", "Verification"]
         
         # helper column ที่ไม่แสดงใน UI แต่ยังแสดงใน df_scr
@@ -228,6 +228,10 @@ class DSOApp(QtWidgets.QWidget):
             self.result_table.setColumnWidth(df_ui.columns.get_loc("Specification"), equal_width)
         if "Symbol/ Exact wording" in df_ui.columns:
             self.result_table.setColumnWidth(df_ui.columns.get_loc("Symbol/ Exact wording"), 240)
+        if "Package Panel" in df_ui.columns:
+            self.result_table.setColumnWidth(df_ui.columns.get_loc("Package Panel"), 240)
+        if "Procedure" in df_ui.columns:
+            self.result_table.setColumnWidth(df_ui.columns.get_loc("Procedure"), equal_width)
 
         if "Remark" in df_ui.columns:
             self.result_table.setColumnWidth(df_ui.columns.get_loc("Remark"), 340)

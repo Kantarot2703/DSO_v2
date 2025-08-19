@@ -27,6 +27,17 @@ def normalize_headers(df):
         if ("spec" in name) or ("specification" in name):
             rename[col] = "Specification"
             continue
+
+        # Package Panel
+        if ("package panel" in name) or ("package" in name and "panel" in name):
+            rename[col] = "Package Panel"
+            continue
+
+        # Procedure
+        if ("procedure" in name) or ("process" in name):
+            rename[col] = "Procedure"
+            continue
+
         # Remark
         if ("remark" in name) or ("หมายเหตุ" in name):
             rename[col] = "Remark"
@@ -497,7 +508,7 @@ def start_check(df_checklist, extracted_text_list):
     "📄 Artwork-like pages considered: %d (real pages: %s)",
     len(artwork_pages),
     list(page_mapping.values())
-)
+    )
 
     for artwork_index, page_items in enumerate(artwork_pages):
         for item in page_items:
@@ -508,6 +519,8 @@ def start_check(df_checklist, extracted_text_list):
     for idx, row in df_checklist.iterrows():
         requirement = str(row.get("Requirement", "")).strip()
         spec = str(row.get("Specification", "")).strip()
+        package_panel = (str(row.get("Package Panel", "")) or "").strip() or "-"
+        procedure = (str(row.get("Package Panel", "")) or "").strip() or "-"
         remark_text = (str(row.get("Remark", "")) or "").strip()
         remark_link = (str(row.get("Remark Link", "")) or "").strip()
 
@@ -723,6 +736,8 @@ def start_check(df_checklist, extracted_text_list):
                 "Requirement": requirement,
                 "Symbol/ Exact wording": term_display,
                 "Specification": spec,
+                "Package Panel": package_panel,
+                "Procedure": procedure,
                 "Remark": item.get("Remark", "-"),
                 "Remark URL": item.get("Remark URL", "-"), 
                 "Found": item["Found"],
