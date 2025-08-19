@@ -520,7 +520,7 @@ def start_check(df_checklist, extracted_text_list):
         requirement = str(row.get("Requirement", "")).strip()
         spec = str(row.get("Specification", "")).strip()
         package_panel = (str(row.get("Package Panel", "")) or "").strip() or "-"
-        procedure = (str(row.get("Package Panel", "")) or "").strip() or "-"
+        procedure = (str(row.get("Procedure", "")) or "").strip() or "-"
         remark_text = (str(row.get("Remark", "")) or "").strip()
         remark_link = (str(row.get("Remark Link", "")) or "").strip()
 
@@ -556,7 +556,9 @@ def start_check(df_checklist, extracted_text_list):
                         "Match": "❌",
                         "Pages": "-",
                         "Font Size": "-",
-                        "Note": "Image mapping only (no text term)"
+                        "Note": "Image mapping only (no text term)",
+                        "Package Panel": package_panel,
+                        "Procedure": procedure,
                     })
                     continue 
                 continue
@@ -578,7 +580,9 @@ def start_check(df_checklist, extracted_text_list):
                         "Match": "❌",
                         "Pages": "-",
                         "Font Size": "-",
-                        "Note": "Image mapping only (manual; empty text fields)"
+                        "Note": "Image mapping only (manual; empty text fields)",
+                        "Package Panel": package_panel,
+                        "Procedure": procedure,
                     })
                     continue
                 else:
@@ -600,6 +604,8 @@ def start_check(df_checklist, extracted_text_list):
                     "Verification": "Manual",
                     "Remark": remark_text,
                     "Remark URL": remark_link,
+                    "Package Panel": package_panel,
+                    "Procedure": procedure,
                 })
             else:
                 for term in term_lines:
@@ -613,6 +619,8 @@ def start_check(df_checklist, extracted_text_list):
                     "Verification": "Manual",
                     "Remark": remark_text,
                     "Remark URL": remark_link,
+                    "Package Panel": package_panel,
+                    "Procedure": procedure,
                     })
             continue
 
@@ -724,6 +732,8 @@ def start_check(df_checklist, extracted_text_list):
                 "Verification": "Verified",
                 "Remark": remark_text,
                 "Remark URL": remark_link,
+                "Package Panel": package_panel,   
+                "Procedure": procedure,           
             })
 
     final_results = []
@@ -736,8 +746,8 @@ def start_check(df_checklist, extracted_text_list):
                 "Requirement": requirement,
                 "Symbol/ Exact wording": term_display,
                 "Specification": spec,
-                "Package Panel": package_panel,
-                "Procedure": procedure,
+                "Package Panel": item.get("Package Panel", "-"),
+                "Procedure": item.get("Procedure", "-"),
                 "Remark": item.get("Remark", "-"),
                 "Remark URL": item.get("Remark URL", "-"), 
                 "Found": item["Found"],
