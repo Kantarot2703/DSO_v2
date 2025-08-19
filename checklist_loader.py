@@ -31,9 +31,9 @@ def normalize_headers(df):
         if ("remark" in name) or ("หมายเหตุ" in name):
             rename[col] = "Remark"
             continue
-        # (ปล่อยคอลัมน์อื่นตามเดิม)
+
     df = df.rename(columns=rename)
-    # กันพลาด: ถ้าไม่มี Requirement จริง ให้ fail ชัดเจน
+
     if "Requirement" not in df.columns:
         raise ValueError("Checklist Excel must contain a column recognizable as 'Requirement'.")
     return df

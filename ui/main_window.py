@@ -194,9 +194,9 @@ class DSOApp(QtWidgets.QWidget):
         df_src = df.copy()
         df.fillna("-", inplace=True)
         # บังคับคอลัมน์แกนหลักให้มีเสมอ
-        preferred = ["Requirement", "Symbol/ Exact wording", "Specification", 
-                    "Remark", "Found", "Match", "Font Size", "Pages",
-                    "Note", "Verification"]
+        preferred = ["Requirement", "Symbol/ Exact wording", "Specification", "Package Panel"
+                    "Procedure", "Remark", "Found", "Match", 
+                    "Font Size", "Pages", "Note", "Verification"]
         
         # helper column ที่ไม่แสดงใน UI แต่ยังแสดงใน df_scr
         helper_names = {"remark url", "remark link"}
@@ -227,8 +227,8 @@ class DSOApp(QtWidgets.QWidget):
         if "Specification" in df_ui.columns:
             self.result_table.setColumnWidth(df_ui.columns.get_loc("Specification"), equal_width)
         if "Symbol/ Exact wording" in df_ui.columns:
-            self.result_table.setColumnWidth(df_ui.columns.get_loc("Symbol/ Exact wording"), 700)
-        
+            self.result_table.setColumnWidth(df_ui.columns.get_loc("Symbol/ Exact wording"), 240)
+
         if "Remark" in df_ui.columns:
             self.result_table.setColumnWidth(df_ui.columns.get_loc("Remark"), 340)
 
@@ -333,6 +333,12 @@ class DSOApp(QtWidgets.QWidget):
                     term_label = QtWidgets.QLabel(term_display)
                     term_label.setWordWrap(True)
 
+                    # ถ้า Not found ให้ตัวอักษรแดง (ยกเว้น Requirement ซึ่งไม่ใช่บล็อกนี้อยู่แล้ว)
+                    if str(row_ui.get("Found", "")).startswith("❌"):
+                        term_label.setStyleSheet("color:#b91c1c;")
+                    else:
+                        term_label.setStyleSheet("")
+
                     # ตรวจว่าเป็นข้อความบรรทัดเดียวและไม่มีรูป
                     single_line = ("\n" not in term_text) and (len(term_text) > 0)
                     has_images  = bool(groups and any(g.get("paths") for g in groups))
@@ -427,19 +433,23 @@ class DSOApp(QtWidgets.QWidget):
                 else:
                     item.setTextAlignment(QtCore.Qt.AlignHCenter | QtCore.Qt.AlignVCenter)
                 
-                # สีตามสถานะ (คง logic เดิม)
+                # สีตามสถานะ
                 if verification == "manual":
                     item.setBackground(QColor("#fff9cc"))
                     if header in ["Found", "Match", "Font Size", "Note"]:
                         item.setForeground(QColor("gray"))
-                elif header == "Symbol/ Exact wording" and found.startswith("❌"):
-                    item.setForeground(QColor("red"))
-                elif header == "Match" and match.startswith("❌"):
-                    item.setForeground(QColor("red"))
-                elif header == "Font Size" and not font_size.startswith("✔"):
-                    item.setForeground(QColor("red"))
-                elif header == "Note" and note.strip() not in ["-", ""]:
-                    item.setForeground(QColor("red"))
+                else:
+                    # ❌ ถ้า Found เป็น Not Found → คอลัมน์ทั้งหมดแดง ยกเว้น Requirement
+                    if found.startswith("❌") and header != "Requirement":
+                        item.setForeground(QColor("red"))
+
+                    # Logic เดิมอื่น ๆ (ยังคงไว้)
+                    elif header == "Match" and match.startswith("❌"):
+                        item.setForeground(QColor("red"))
+                    elif header == "Font Size" and not font_size.startswith("✔"):
+                        item.setForeground(QColor("red"))
+                    elif header == "Note" and note.strip() not in ["-", ""]:
+                        item.setForeground(QColor("red"))
 
                 self.result_table.setItem(row_idx, col_idx, item)
 
