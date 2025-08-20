@@ -2,6 +2,7 @@ import os, io, re
 import pandas as pd
 import logging
 import unicodedata
+import html
 from PyQt5.QtCore import Qt
 from openpyxl import load_workbook
 from openpyxl.styles.colors import Color
@@ -152,6 +153,94 @@ def normalize_text(text):
     text = re.sub(r"\s+", " ", text)    
     return text.strip().lower()
 
+def extract_underlines_from_excel(excel_path, sheet_name, header_row_index, df):
+    """
+    อ่านรูปแบบตัวอักษรจากคอลัมน์ Symbol/Exact wording ใน Excel
+    - รองรับ rich text: underline/ bold เฉพาะบางช่วงคำ
+    - ถ้าไม่มี rich runs จะ fallback ตาม font ของทั้ง cell
+    คืนค่า: เพิ่มคอลัมน์ __Term_HTML__ (HTML พร้อม <u>, <b>)
+    """
+    try:
+        # ต้องมีคอลัมน์ Symbol/Exact wording ก่อน
+        if "Symbol/Exact wording" not in df.columns:
+            df["__Term_HTML__"] = df.get("Symbol/Exact wording", "").astype(str)
+            return df
+
+        wb = load_workbook(excel_path, data_only=False)
+        ws = wb[sheet_name]
+
+        term_col_idx = list(df.columns).index("Symbol/Exact wording") + 1
+        start_row = header_row_index + 2  # แถวแรกของข้อมูลจริง
+
+        def _cell_rich_to_html(cell, plain_text: str) -> str:
+            """พยายามอ่าน rich runs; ถ้าไม่ได้ให้ fallback ตาม font ทั้ง cell"""
+            txt_plain = html.escape(plain_text or "")
+
+            # 1) พยายามอ่าน rich text runs
+            try:
+                val = cell.value  # บางเวอร์ชันเป็น rich text object
+                runs = []
+                if hasattr(val, "rich") and val.rich:
+                    runs = val.rich
+                elif hasattr(val, "runs") and val.runs:
+                    runs = val.runs
+
+                if runs:
+                    parts = []
+                    for r in runs:
+                        # ดึงข้อความ
+                        t = getattr(r, "text", None)
+                        if t is None:
+                            t = str(r)
+                        t_html = html.escape(str(t))
+
+                        # ดึง style ถ้าได้
+                        f = getattr(r, "font", None)
+                        is_bold = bool(getattr(f, "bold", False)) if f else False
+                        is_ul   = bool(getattr(f, "underline", False)) if f else False
+
+                        if is_bold:
+                            t_html = f"<b>{t_html}</b>"
+                        if is_ul:
+                            t_html = f"<u>{t_html}</u>"
+
+                        parts.append(t_html)
+
+                    # รวมเป็น HTML เดียว (คงลำดับตาม runs)
+                    return "".join(parts)
+            except Exception as e:
+                logging.debug(f"rich runs parse failed: {e}")
+
+            # 2) Fallback: ใช้ font ของทั้ง cell
+            try:
+                f = getattr(cell, "font", None)
+                if f:
+                    if bool(getattr(f, "bold", False)):
+                        txt_plain = f"<b>{txt_plain}</b>"
+                    if bool(getattr(f, "underline", False)):
+                        txt_plain = f"<u>{txt_plain}</u>"
+            except Exception:
+                pass
+
+            return txt_plain
+
+        html_list = []
+        for i in range(len(df)):
+            cell = ws.cell(row=start_row + i, column=term_col_idx)
+            text_val = str(df.iloc[i].get("Symbol/Exact wording", "") or "")
+            html_list.append(_cell_rich_to_html(cell, text_val))
+
+        df["__Term_HTML__"] = [
+            (h or "").replace("\r", "").replace("\n", "<br>")
+            for h in html_list
+        ]
+        return df
+
+    except Exception as e:
+        logging.debug(f"Underline extraction failed: {e}")
+        df["__Term_HTML__"] = df.get("Symbol/Exact wording", "").astype(str)
+        return df
+
 def load_checklist(excel_path, pdf_filename=None):
     all_sheets = pd.read_excel(excel_path, sheet_name=None)
     sheet_names = list(all_sheets.keys())
@@ -216,6 +305,7 @@ def load_checklist(excel_path, pdf_filename=None):
                     raise ValueError(f"❌ ไม่พบแถว header ที่เหมาะสมใน sheet: {sheet_name}")
                 
                 df.columns = df.iloc[header_row_index]
+                df.columns = [str(c).replace("\n", " ").strip() for c in df.columns]
                 df = df[header_row_index + 1:].reset_index(drop=True)
                 logging.info(f"🧾 Header chosen at row {header_row_index+1} | columns: {list(df.columns)[:6]}...")
 
@@ -434,12 +524,13 @@ def load_checklist(excel_path, pdf_filename=None):
                 columns_to_exclude = ["Instruction of Play function feature", "Warning statement"]
                 df = df[[col for col in df.columns if col and str(col).strip().lower() not in columns_to_exclude]]
 
-                # Explode multi-term 
-                df["Symbol/Exact wording"] = df["Symbol/Exact wording"].astype(str).str.replace("\r", "")
-                df["Symbol/Exact wording"] = df["Symbol/Exact wording"].apply(
-                    lambda s: [p.strip() for p in s.split("\n") if p.strip()] if ("\n" in s) else [s.strip()]
-                )
-                df = df.explode("Symbol/Exact wording", ignore_index=True)
+                df = extract_underlines_from_excel(excel_path, sheet_name, header_row_index, df)
+                
+                # อย่า explode อีกต่อไป — เก็บเป็น “สตริงเดียว” (จะมี \n ก็ปล่อยให้เป็นบรรทัดใหม่ในสตริง)
+                df["Symbol/Exact wording"] = df["Symbol/Exact wording"].astype(str).str.replace("\r", "", regex=False)
+
+                if "__Term_HTML__" in df.columns:
+                    df["__Term_HTML__"] = df["__Term_HTML__"].apply(lambda x: str(x))
 
                 # Language List 
                 if lang_col:
@@ -556,9 +647,11 @@ def start_check(df_checklist, extracted_text_list):
                         "Match": "❌",
                         "Pages": "-",
                         "Font Size": "-",
-                        "Note": "Image mapping only (no text term)",
+                        "Note": "-",
                         "Package Panel": package_panel,
                         "Procedure": procedure,
+                        "__Term_HTML__": row.get("__Term_HTML__", ""),
+                        "Image_Groups_Resolved": row.get("Image_Groups_Resolved", row.get("Image_Groups", [])),
                     })
                     continue 
                 continue
@@ -580,9 +673,11 @@ def start_check(df_checklist, extracted_text_list):
                         "Match": "❌",
                         "Pages": "-",
                         "Font Size": "-",
-                        "Note": "Image mapping only (manual; empty text fields)",
+                        "Note": "-",
                         "Package Panel": package_panel,
                         "Procedure": procedure,
+                        "__Term_HTML__": row.get("__Term_HTML__", ""),
+                        "Image_Groups_Resolved": row.get("Image_Groups_Resolved", row.get("Image_Groups", [])),
                     })
                     continue
                 else:
@@ -606,6 +701,8 @@ def start_check(df_checklist, extracted_text_list):
                     "Remark URL": remark_link,
                     "Package Panel": package_panel,
                     "Procedure": procedure,
+                    "__Term_HTML__": row.get("__Term_HTML__", ""),
+                    "Image_Groups_Resolved": row.get("Image_Groups_Resolved", row.get("Image_Groups", [])),
                 })
             else:
                 for term in term_lines:
@@ -621,6 +718,8 @@ def start_check(df_checklist, extracted_text_list):
                     "Remark URL": remark_link,
                     "Package Panel": package_panel,
                     "Procedure": procedure,
+                    "__Term_HTML__": row.get("__Term_HTML__", ""),
+                    "Image_Groups_Resolved": row.get("Image_Groups_Resolved", row.get("Image_Groups", [])),
                     })
             continue
 
@@ -733,7 +832,9 @@ def start_check(df_checklist, extracted_text_list):
                 "Remark": remark_text,
                 "Remark URL": remark_link,
                 "Package Panel": package_panel,   
-                "Procedure": procedure,           
+                "Procedure": procedure,
+                "__Term_HTML__": row.get("__Term_HTML__", ""),
+                "Image_Groups_Resolved": row.get("Image_Groups_Resolved", row.get("Image_Groups", [])),         
             })
 
     final_results = []
@@ -755,7 +856,13 @@ def start_check(df_checklist, extracted_text_list):
                 "Pages": item["Pages"],
                 "Font Size": item["Font Size"],
                 "Note": item["Note"],
-                "Verification": verification
+                "Verification": verification,
+                "__Term_HTML__": item.get("__Term_HTML__", ""),
+                "Image_Groups_Resolved": item.get("Image_Groups_Resolved", []),
             })
+
+            logging.info(f"[CHK] final_results count: {len(final_results)}")
+            logging.info(f"[CHK] __Term_HTML__ sample: {[item.get('__Term_HTML__', '') for item in final_results[:3]]}")
+            logging.info(f"[CHK] Image_Groups_Resolved sample: {[item.get('Image_Groups_Resolved', []) for item in final_results[:2]]}")
 
     return pd.DataFrame(final_results)

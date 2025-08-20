@@ -227,7 +227,7 @@ class DSOApp(QtWidgets.QWidget):
         if "Specification" in df_ui.columns:
             self.result_table.setColumnWidth(df_ui.columns.get_loc("Specification"), equal_width)
         if "Symbol/ Exact wording" in df_ui.columns:
-            self.result_table.setColumnWidth(df_ui.columns.get_loc("Symbol/ Exact wording"), 240)
+            self.result_table.setColumnWidth(df_ui.columns.get_loc("Symbol/ Exact wording"), 300)
         if "Package Panel" in df_ui.columns:
             self.result_table.setColumnWidth(df_ui.columns.get_loc("Package Panel"), 240)
         if "Procedure" in df_ui.columns:
@@ -318,7 +318,7 @@ class DSOApp(QtWidgets.QWidget):
                 if header == "Symbol/ Exact wording":
                     req_text  = str(row_src.get("Requirement", "")).strip()
                     term_text = str(value).strip()
-                    groups    = _lookup_image_groups(req_text, term_text)
+                    groups = row_src.get("Image_Groups_Resolved") or row_src.get("Image_Groups") or []
 
                     container = QtWidgets.QWidget()
                     outer = QtWidgets.QVBoxLayout(container)
@@ -334,14 +334,39 @@ class DSOApp(QtWidgets.QWidget):
                         term_display = text_clean
 
                     # สร้าง QLabel สำหรับข้อความ
-                    term_label = QtWidgets.QLabel(term_display)
+                    term_label = QtWidgets.QLabel()
                     term_label.setWordWrap(True)
+                    term_label.setTextFormat(QtCore.Qt.RichText)
+                    term_label.setTextInteractionFlags(Qt.TextBrowserInteraction)  # ให้ <br> / ลิงก์ทำงาน
 
-                    # ถ้า Not found ให้ตัวอักษรแดง (ยกเว้น Requirement ซึ่งไม่ใช่บล็อกนี้อยู่แล้ว)
+                    # อ่าน HTML จากแถวนี้ (ลอง __Term_HTML__ ก่อน แล้วค่อย Term_Underline_HTML)
+                    html_val = ""
+                    for k in ("__Term_HTML__", "Term_Underline_HTML"):
+                        v = row_src.get(k, "")
+                        if isinstance(v, str) and v.strip():
+                            html_val = v.strip()
+                            break
+
+                    # ข้อความ fallback เมื่อไม่มี HTML
+                    term_text = str(value).strip()
+                    if not term_text or term_text in ["-", "nan", "None"]:
+                        has_images = bool(groups and any(g.get("paths") for g in groups))
+                        term_text = "" if has_images else "-"
+
+                    logging.info(f"[UI] row {row_idx} __Term_HTML__ short: { (html_val[:80] + '...') if html_val else '<empty>' }")
+                    logging.info(f"[UI] row {row_idx} groups-len: {len(groups) if groups else 0}")
+
+                    term_label.setText(html_val if html_val else term_text)
+
+                    # ถ้า Not Found ให้เป็นสีแดง (คงของเดิม)
                     if str(row_ui.get("Found", "")).startswith("❌"):
                         term_label.setStyleSheet("color:#b91c1c;")
                     else:
                         term_label.setStyleSheet("")
+
+                    outer.addWidget(term_label)
+                    container.setLayout(outer)
+                    self.result_table.setCellWidget(row_idx, col_idx, container)
 
                     # ตรวจว่าเป็นข้อความบรรทัดเดียวและไม่มีรูป
                     single_line = ("\n" not in term_text) and (len(term_text) > 0)
