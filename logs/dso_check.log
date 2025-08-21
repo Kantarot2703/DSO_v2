@@ -1,69 +1,49 @@
-2025-08-21 09:55:28,438 | INFO | root | 📂 PDF filename: JCP34_JCP35_LA-CONVENTION_25HW_DOM_A5_Approved.pdf
-2025-08-21 09:55:28,438 | INFO | root | 🧠 Part codes detected: ['DOM']
-2025-08-21 09:55:28,438 | INFO | root | 📄 Sheet names: ['DOM', '4LB']
-2025-08-21 09:55:28,438 | INFO | root | ✅ Found matching sheet: DOM
-2025-08-21 09:55:28,454 | INFO | root | 🧾 Header chosen at row 2 | columns: ['Check list', 'Requirement', 'Symbol/  Exact wording', 'Specification', 'Package Panel', 'Procedure']...
-2025-08-21 09:55:28,454 | INFO | root | 🧾 Columns found in sheet: ['Check list', 'Requirement', 'Symbol/  Exact wording', 'Specification', 'Package Panel', 'Procedure', 'Remark', 'Image Match', 'Image Path']
-2025-08-21 09:55:28,454 | INFO | root | 🛟 Fallback columns → Term: Symbol/  Exact wording, Language: None, Spec: Requirement
-2025-08-21 09:55:28,454 | INFO | root | 🔎 ใช้คอลัมน์ Term: Symbol/  Exact wording, Language: None, Spec: Requirement
-2025-08-21 09:55:28,522 | INFO | root | [underline] approx_start_row=3, real_start_row=4
-2025-08-21 09:55:31,627 | INFO | checklist_loader | 📄 Artwork-like pages considered: 2 (real pages: [1, 2])
-2025-08-21 09:55:31,629 | INFO | checklist_loader | ✅ [FOUND] Req: 'Language code' | Term: 'DOM or UU1' | Pages: All pages | Match: ✔ | Font: - | Notes: -
-2025-08-21 09:55:31,630 | WARNING | checklist_loader | ❌ [NOT FOUND] Req: 'Age grade 3+
+2025-08-21 13:40:26,810 | INFO | root | 📂 PDF filename: JCP34_JCP35_LA-CONVENTION_25HW_DOM_A5_Approved.pdf
+2025-08-21 13:40:26,810 | INFO | root | 🧠 Part codes detected: ['DOM']
+2025-08-21 13:40:26,810 | INFO | root | 📄 Sheet names: ['DOM', '4LB']
+2025-08-21 13:40:26,810 | INFO | root | ✅ Found matching sheet: DOM
+2025-08-21 13:40:26,816 | INFO | root | 🧾 Header chosen at row 2 | columns: ['Check list', 'Requirement', 'Symbol/  Exact wording', 'Specification', 'Package Panel', 'Procedure']...
+2025-08-21 13:40:26,816 | INFO | root | 🧾 Columns found in sheet: ['Check list', 'Requirement', 'Symbol/  Exact wording', 'Specification', 'Package Panel', 'Procedure', 'Remark', 'Image Match', 'Image Path']
+2025-08-21 13:40:26,817 | INFO | root | 🛟 Fallback columns → Term: Symbol/  Exact wording, Language: None, Spec: Requirement
+2025-08-21 13:40:26,817 | INFO | root | 🔎 ใช้คอลัมน์ Term: Symbol/  Exact wording, Language: None, Spec: Requirement
+2025-08-21 13:40:26,964 | INFO | root | [underline] approx_start_row=3, real_start_row=4
+2025-08-21 13:40:27,855 | INFO | checklist_loader | 📄 Artwork-like pages considered: 2 (real pages: [1, 2])
+2025-08-21 13:40:27,858 | INFO | checklist_loader | ✅ [FOUND] Req: 'Language code' | Term: 'DOM or UU1' | Pages: All pages | Match: ✔ | Font: - | Notes: -
+2025-08-21 13:40:27,858 | WARNING | checklist_loader | ❌ [NOT FOUND] Req: 'Age grade 3+
 (All markets)' | Term tried: '3+'
-2025-08-21 09:55:31,630 | INFO | checklist_loader | ✅ [FOUND] Req: 'Country of origin
+2025-08-21 13:40:27,859 | INFO | checklist_loader | ✅ [FOUND] Req: 'Country of origin
 (All markets)' | Term: 'MADE IN THAILAND' | Pages: All pages | Match: ❌ | Font: - | Notes: Not Bold
-2025-08-21 09:55:31,630 | INFO | checklist_loader | ✅ [FOUND] Req: 'Address
+2025-08-21 13:40:27,860 | INFO | checklist_loader | ✅ [FOUND] Req: 'Address
 (EU)' | Term: 'Manufactured, imported or distributed by:
 Mattel Europa B.V., Gondel 1, 1186 MJ Amstelveen, Nederland.' | Pages: All pages | Match: ❌ | Font: - | Notes: Underline Missing
-2025-08-21 09:55:31,631 | INFO | checklist_loader | ✅ [FOUND] Req: 'ASTM requirement
+2025-08-21 13:40:27,861 | INFO | checklist_loader | ✅ [FOUND] Req: 'ASTM requirement
 (USA)' | Term: 'CONFORMS TO THE SAFETY REQUIREMENTS OF ASTM F963.' | Pages: All pages | Match: ✔ | Font: ✔ | Notes: -
-2025-08-21 09:55:31,631 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'Space for Date code
+2025-08-21 13:40:27,862 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'Space for Date code
 (All markets)' | Spec: 'Must not cover any text and illustration' → Manual verification
-2025-08-21 09:55:31,631 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'Lion mark
+2025-08-21 13:40:27,862 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'Lion mark
 (All markets)' | Spec: '≥ 5 mm.' → Manual verification
-2025-08-21 09:55:31,632 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'CE mark
+2025-08-21 13:40:27,863 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'CE mark
 (All markets)' | Spec: '≥ 5 mm.' → Manual verification
-2025-08-21 09:55:31,632 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'UKCA mark
+2025-08-21 13:40:27,864 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'UKCA mark
 (All markets)' | Spec: '≥ 5 mm.' → Manual verification
-2025-08-21 09:55:31,632 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'MC  mark
+2025-08-21 13:40:27,864 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'MC  mark
 (All markets)' | Spec: '≥ 5x5 mm.
 (Exclude numbers under MC )' → Manual verification
-2025-08-21 09:55:31,633 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'CIB: Consumer Information Block
+2025-08-21 13:40:27,865 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'CIB: Consumer Information Block
 (All markets)' | Spec: 'must be located near the legal copy' → Manual verification
-2025-08-21 09:55:31,633 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'International
+2025-08-21 13:40:27,866 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'International
  warning statement
 (All markets)' | Spec: 'SYMBOL ≥ 10 mm
 TEXT ≥ 1.5 mm' → Manual verification
-2025-08-21 09:55:31,634 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'International
+2025-08-21 13:40:27,866 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'International
  warning statement
 (All markets)' | Spec: 'SYMBOL ≥ 10 mm
 TEXT ≥ 1.5 mm' → Manual verification
-2025-08-21 09:55:31,634 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'UPC requirement
+2025-08-21 13:40:27,867 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'UPC requirement
 (All markets)' | Spec: 'Size of UPC Barcode depend on area panel' → Manual verification
-2025-08-21 09:55:31,634 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'List of content : Text
+2025-08-21 13:40:27,868 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'List of content : Text
 (All market)' | Spec: 'Internation requriement: A list of contents is required when the product is in a closed package where the actual contents are not
 visible.' → Manual verification
-2025-08-21 09:55:31,635 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'List of content : 
+2025-08-21 13:40:27,869 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'List of content : 
 pictorial
 (All markets)' | Spec: 'Internation requriement:  A pictorial (photo or graphic art) list of contents of the package contents may be used.' → Manual verification
-2025-08-21 09:55:31,645 | INFO | root | [UI] row 0 HTML? True / text='DOM or UU1' / imgs=0
-2025-08-21 09:55:31,653 | INFO | root | [UI] row 1 HTML? True / text='3+' / imgs=0
-2025-08-21 09:55:31,655 | INFO | root | [UI] row 2 HTML? False / text='' / imgs=1
-2025-08-21 09:55:32,207 | INFO | root | [UI] row 3 HTML? False / text='' / imgs=1
-2025-08-21 09:55:32,249 | INFO | root | [UI] row 4 HTML? True / text='MADE IN THAILAND' / imgs=0
-2025-08-21 09:55:32,252 | INFO | root | [UI] row 5 HTML? True / text='Manufactured, imported or distributed by:
-Mattel Europa B.V....' / imgs=0
-2025-08-21 09:55:32,254 | INFO | root | [UI] row 6 HTML? True / text='CONFORMS TO THE SAFETY REQUIREMENTS OF ASTM F963.' / imgs=0
-2025-08-21 09:55:32,257 | INFO | root | [UI] row 7 HTML? False / text='' / imgs=1
-2025-08-21 09:55:32,282 | INFO | root | [UI] row 8 HTML? False / text='' / imgs=1
-2025-08-21 09:55:32,422 | INFO | root | [UI] row 9 HTML? False / text='' / imgs=1
-2025-08-21 09:55:32,440 | INFO | root | [UI] row 10 HTML? False / text='' / imgs=1
-2025-08-21 09:55:32,459 | INFO | root | [UI] row 11 HTML? False / text='' / imgs=1
-2025-08-21 09:55:32,476 | INFO | root | [UI] row 12 HTML? False / text='' / imgs=1
-2025-08-21 09:55:32,636 | INFO | root | [UI] row 13 HTML? False / text='' / imgs=1
-2025-08-21 09:55:32,695 | INFO | root | [UI] row 14 HTML? False / text='' / imgs=1
-2025-08-21 09:55:32,755 | INFO | root | [UI] row 15 HTML? False / text='' / imgs=1
-2025-08-21 09:55:32,794 | INFO | root | [UI] row 16 HTML? False / text='' / imgs=1
-2025-08-21 09:55:32,854 | INFO | root | [UI] row 17 HTML? False / text='' / imgs=1
-2025-08-21 09:55:32,874 | INFO | root | [UI] row 18 HTML? False / text='' / imgs=1

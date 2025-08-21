@@ -1,7 +1,7 @@
 import os, re
 import pandas as pd
 import logging
-from PyQt5.QtWidgets import QWidget, QLabel, QHBoxLayout, QVBoxLayout, QGridLayout
+from PyQt5.QtWidgets import QWidget, QLabel, QHBoxLayout, QVBoxLayout, QGridLayout, QHeaderView
 from PyQt5.QtCore import Qt
 from PyQt5 import QtWidgets, QtGui, QtCore
 from ui.pdf_viewer import PDFViewer
@@ -223,6 +223,19 @@ class DSOApp(QtWidgets.QWidget):
         self.result_table.setColumnCount(len(df_ui.columns))
         self.result_table.setHorizontalHeaderLabels(df_ui.columns.tolist())
 
+        symbol_names = {"Symbol/  Exact wording", "Symbol/ Exact wording", "Symbol/Exact wording"}
+        sym_col = None
+        for c in range(self.result_table.columnCount()):
+            hi = self.result_table.horizontalHeaderItem(c)
+            if hi and hi.text().strip() in symbol_names:
+                sym_col = c
+                break
+
+        if sym_col is not None:
+            hh = self.result_table.horizontalHeader()
+            hh.setSectionResizeMode(sym_col, QHeaderView.Fixed) 
+            self.result_table.setColumnWidth(sym_col, 320) 
+
         # Bold header font
         header_font = self.result_table.horizontalHeader().font()
         header_font.setBold(True)
@@ -238,7 +251,7 @@ class DSOApp(QtWidgets.QWidget):
         if "Specification" in df_ui.columns:
             self.result_table.setColumnWidth(df_ui.columns.get_loc("Specification"), equal_width)
         if "Symbol/ Exact wording" in df_ui.columns:
-            self.result_table.setColumnWidth(df_ui.columns.get_loc("Symbol/ Exact wording"), 300)
+            self.result_table.setColumnWidth(df_ui.columns.get_loc("Symbol/ Exact wording"), 350)
         if "Package Panel" in df_ui.columns:
             self.result_table.setColumnWidth(df_ui.columns.get_loc("Package Panel"), 240)
         if "Procedure" in df_ui.columns:
@@ -328,84 +341,83 @@ class DSOApp(QtWidgets.QWidget):
 
                 if header == "Symbol/ Exact wording":
                     req_text  = str(row_src.get("Requirement", "")).strip()
-                    term_text = str(value).strip()
-                        
-                    def _safe_text(x):
-                            s = "" if x is None else str(x).strip()
-                            if s.lower() in ("nan", "none", "-"):  # กัน nan/none/- โผล่
-                                return ""
-                            return s
 
-                    term_text = _safe_text(term_text)
+                    # ----- เตรียมค่า text/html -----
+                    def _clean_plain(s: str) -> str:
+                        if s is None:
+                            return ""
+                        s = str(s).strip()
+                        return "" if s.lower() in ("nan", "none", "-") else s
 
+                    # กลุ่มรูปของแถวนี้
                     groups = row_src.get("Image_Groups_Resolved") or row_src.get("Image_Groups") or []
                     has_images = bool(groups and any(g.get("paths") for g in groups))
 
-                    # สร้าง QLabel สำหรับข้อความ
-                    term_label = QtWidgets.QLabel()
-                    term_label.setWordWrap(False)
-                    self.result_table.horizontalHeader().setSectionResizeMode(col_idx, QtWidgets.QHeaderView.ResizeToContents)
-                    term_label.setTextFormat(QtCore.Qt.RichText)
-                    term_label.setTextInteractionFlags(Qt.TextBrowserInteraction)
-                    term_label.setAlignment(QtCore.Qt.AlignVCenter)
-                    term_label.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.MinimumExpanding)
+                    # plain text (จาก df_ui)
+                    term_raw  = row_ui.get(header, "")
+                    term_text = _clean_plain(term_raw)
 
+                    # html (underline/bold) จาก excel
                     def _clean_html(s: str) -> str:
-                        if not s:
+                        if not isinstance(s, str):
                             return ""
-                        s = s.strip()
-                        if s.lower() in ("nan", "none", "-"):
+                        s2 = s.strip()
+                        if s2.lower() in ("nan", "none", "-"):
                             return ""
-                        plain = re.sub(r"<[^>]+>", "", s).strip()
-                        return "" if plain == "" or plain.lower() in ("nan", "none", "-") else s
+                        plain = re.sub(r"<[^>]+>", "", s2).strip()
+                        return "" if plain == "" else s2
 
-                    # อ่าน HTML จากแถวนี้ (ลอง __Term_HTML__ ก่อน แล้วค่อย Term_Underline_HTML)
                     html_val = ""
                     for k in ("__Term_HTML__", "Term_Underline_HTML"):
                         v = row_src.get(k, "")
                         if isinstance(v, str) and v.strip():
-                            html_val = v.strip()
-                            break
+                            html_val = _clean_html(v)
+                            if html_val:
+                                break
 
-                    html_val = _clean_html(html_val)
-
-                    # fallback เมื่อไม่มี HTML
-                    def _has_content(s: str) -> bool:
-                        return bool(s) and s.strip() !=""
-
-                    text_has_content = _has_content(term_text)
-                    html_has_content = _has_content(html_val)
-
-                    if html_has_content:
+                    # ตัดสินใจข้อความที่จะแสดง
+                    if html_val:
                         display_text = html_val
-                    elif text_has_content:
+                        plain_for_measure = re.sub(r"<[^>]+>", "", html_val)
+                    elif term_text:
                         display_text = term_text
+                        plain_for_measure = term_text
                     else:
+                        # **เงื่อนไขสำคัญของข้อ 1**:
+                        # ถ้าไม่มีข้อความ แต่ "มีรูป" → ไม่ใส่ "-" ปล่อยเป็นว่างจริง
                         display_text = "" if has_images else "-"
+                        plain_for_measure = ""
 
-                    # log ช่วยดีบัก
-                    logging.info(f"[UI] row {row_idx} HTML? {bool(html_val)} / text='{(term_text[:60]+'...') if term_text and len(term_text)>60 else term_text}' / imgs={len(groups) if groups else 0}")
-
-                    # ตั้งค่า label ครั้งเดียว
-                    term_label.setText(display_text)
-
-                    # ถ้า Not Found ให้เป็นสีแดง (คงของเดิม)
-                    if str(row_ui.get("Found", "")).startswith("❌"):
-                        term_label.setStyleSheet("color:#b91c1c;")
-                    else:
-                        term_label.setStyleSheet("")
-
-                    # สร้าง container widget สำหรับ cell นี้
+                    # ----- สร้าง UI ของเซลล์ -----
                     container = QtWidgets.QWidget()
                     outer = QtWidgets.QVBoxLayout(container)
-                    outer.setContentsMargins(6, 6, 6, 6)
-                    outer.setSpacing(8)
+                    outer.setContentsMargins(8, 4, 8, 4)     # ลด margin ข้างให้พอดี
+                    outer.setSpacing(6)
                     outer.setAlignment(QtCore.Qt.AlignCenter)
 
-                    # วางข้อความครั้งเดียว (ห้าม add ซ้ำ)
-                    outer.addWidget(term_label, 0, QtCore.Qt.AlignVCenter)
+                    # วาง "ข้อความ" เฉพาะเมื่อมีข้อความจริงเท่านั้น
+                    if display_text.strip():
+                        term_label = QtWidgets.QLabel()
+                        term_label.setTextFormat(QtCore.Qt.RichText)
+                        term_label.setTextInteractionFlags(Qt.TextBrowserInteraction)
+                        term_label.setAlignment(QtCore.Qt.AlignHCenter | QtCore.Qt.AlignVCenter)
 
-                    # รูป (หากมี) จัดให้อยู่กึ่งกลางแนวตั้ง/แนวนอน
+                        # ตัดบรรทัดเฉพาะจำเป็น (กันขึ้นบรรทัดเกิน)
+                        col_width = self.result_table.columnWidth(col_idx)
+                        fm = term_label.fontMetrics()
+                        need_wrap = fm.horizontalAdvance(plain_for_measure) > max(40, col_width - 24)
+                        term_label.setWordWrap(need_wrap)
+                        term_label.setText(display_text)
+
+                        # สีแดงกรณี Not Found (คงพฤติกรรมเดิม)
+                        if str(row_ui.get("Found", "")).startswith("❌"):
+                            term_label.setStyleSheet("color:#b91c1c;")
+                        else:
+                            term_label.setStyleSheet("")
+
+                        outer.addWidget(term_label, 0, QtCore.Qt.AlignHCenter | QtCore.Qt.AlignVCenter)
+
+                    # ----- ส่วนรูปภาพ -----
                     if has_images:
                         all_paths = []
                         for g in groups:
@@ -417,52 +429,73 @@ class DSOApp(QtWidgets.QWidget):
                         if all_paths:
                             img_wrap = QtWidgets.QWidget()
                             img_vbox = QtWidgets.QVBoxLayout(img_wrap)
-                            img_vbox.setContentsMargins(0, 8, 0, 8)
+                            padding_lr = 12
+                            img_vbox.setContentsMargins(padding_lr, 8, padding_lr, 8)
                             img_vbox.setSpacing(8)
                             img_vbox.setAlignment(QtCore.Qt.AlignHCenter | QtCore.Qt.AlignVCenter)
+
+                            # ความกว้างรูปสูงสุด = ความกว้างคอลัมน์ - padding ซ้าย/ขวา
+                            col_width = self.result_table.columnWidth(col_idx)
+                            max_img_w = max(80, col_width - (padding_lr * 2))
+
+                            def _is_logo(path: str, req: str) -> bool:
+                                p_low = os.path.basename(path or "").lower()
+                                r_low = (req or "").lower()
+                                # คีย์เวิร์ดทั่วไปของโลโก้/มาร์ก
+                                keys = ("logo", "mark", "lion", "ce ", "ukca", "mc ")
+                                return any(k in p_low for k in keys) or any(k in r_low for k in keys)
 
                             for p in all_paths:
                                 if not p:
                                     continue
+
                                 pm = self._image_cache.get(p)
                                 if pm is None:
                                     qpm = QtGui.QPixmap(p)
                                     pm = qpm if not qpm.isNull() else None
                                     self._image_cache[p] = pm if pm else QtGui.QPixmap()
 
+                                lbl = QtWidgets.QLabel()
+                                lbl.setAlignment(QtCore.Qt.AlignHCenter | QtCore.Qt.AlignVCenter)
+
                                 if not pm:
-                                    miss = QtWidgets.QLabel(f"[!] Missing image: {p}")
-                                    miss.setStyleSheet("color:#b91c1c;")
-                                    miss.setAlignment(QtCore.Qt.AlignHCenter | QtCore.Qt.AlignVCenter)
-                                    img_vbox.addWidget(miss, 0, QtCore.Qt.AlignHCenter | QtCore.Qt.AlignVCenter)
+                                    lbl.setText(f"[!] Missing image: {p}")
+                                    lbl.setStyleSheet("color:#b91c1c;")
+                                    img_vbox.addChildWidget(lbl, 0, QtCore.Qt.AlignHCenter | QtCore.Qt.AlignVCenter)
+                                    continue
+
+                                 # โลโก้ = คงเล็ก / non‑logo = ขยายเต็มคอลัมน์ (เผื่อ margin)
+                                if _is_logo(p, req_text):
+                                    target_w = min(140, max_img_w) 
                                 else:
-                                    lbl = QtWidgets.QLabel()
-                                    lbl.setAlignment(QtCore.Qt.AlignHCenter | QtCore.Qt.AlignVCenter)
-
-                                    # ลดเฉพาะรูปโลโก้/มาร์ก เท่านั้น
-                                    p_low   = os.path.basename(p).lower()
-                                    req_low = req_text.lower()
-                                    is_logo = any(k in p_low for k in ("logo", "mark", "lion", "ce ", "ukca", "mc "))
-                                    is_logo = is_logo or any(k in req_low for k in ("logo", "mark", "lion", "ce ", "ukca", "mc "))
-
-                                    target_w = 120 if is_logo else 240
+                                    target_w = min(int(max_img_w * 0.96), pm.width())
+                                
+                                # สเกลเฉพาะกรณีจำเป็น (ไม่ขยายเกินไฟล์จริง)
+                                if pm.width() > target_w:
                                     lbl.setPixmap(pm.scaledToWidth(target_w, QtCore.Qt.SmoothTransformation))
-                                    img_vbox.addWidget(lbl, 0, QtCore.Qt.AlignHCenter | QtCore.Qt.AlignVCenter)
+                                else:
+                                    lbl.setPixmap(pm)
 
+                                img_vbox.addWidget(lbl, 0, QtCore.Qt.AlignHCenter | QtCore.Qt.AlignVCenter)
 
-                            outer.addWidget(img_wrap, 0, QtCore.Qt.AlignHCenter | QtCore.Qt.AlignVCenter)
+                            # ถ้า "ไม่มีข้อความ" → ใส่ stretch ก่อน/หลังภาพให้ลอยกึ่งกลางแนวตั้งจริง
+                            if not display_text.strip():
+                                outer.addStretch(1)
+                                outer.addWidget(img_wrap, 0, QtCore.Qt.AlignHCenter | QtCore.Qt.AlignVCenter)
+                                outer.addStretch(1)
+                            else:
+                                outer.addWidget(img_wrap, 0, QtCore.Qt.AlignHCenter | QtCore.Qt.AlignVCenter)
 
                     container.setLayout(outer)
                     self.result_table.setCellWidget(row_idx, col_idx, container)
 
+                    # ปรับความสูงแถวให้พอดีเนื้อหา
                     self.result_table.resizeRowToContents(row_idx)
-
-                    # หากตารางมีสไตล์ที่บังคับความสูงไว้ ใช้ sizeHint เป็น fallback
-                    need_h = max(container.sizeHint().height(), 28)
-                    if self.result_table.rowHeight(row_idx) < need_h:
-                        self.result_table.setRowHeight(row_idx, need_h)
+                    if self.result_table.rowHeight(row_idx) < 28:
+                        self.result_table.setRowHeight(row_idx, 28)
 
                     continue
+
 
                 # Remark คอลัมน์เดียว แต่คลิกได้ถ้ามีลิงก์จาก Excel; ถ้าไม่มีให้ linkify/หรือ "-" ; จัดกึ่งกลาง 
                 if header == "Remark":
