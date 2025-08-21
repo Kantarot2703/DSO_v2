@@ -192,8 +192,10 @@ class DSOApp(QtWidgets.QWidget):
 
     def display_results(self, df: pd.DataFrame):
         df_src = df.copy()
-        df.fillna("-", inplace=True)
-        # บังคับคอลัมน์แกนหลักให้มีเสมอ
+        symbol_cols_protect = {"Symbol/ Exact wording", "Symbol/Exact wording", "__Term_HTML__"}
+        cols_to_fill = [c for c in df.columns if c not in symbol_cols_protect]
+        df[cols_to_fill] = df[cols_to_fill].fillna("-")
+
         preferred = ["Requirement", "Symbol/ Exact wording", "Specification", 
                     "Package Panel", "Procedure", "Remark", "Found", "Match", 
                     "Font Size", "Pages", "Note", "Verification"]
@@ -202,9 +204,18 @@ class DSOApp(QtWidgets.QWidget):
         helper_names = {"remark url", "remark link"}
         helper_cols = [ c for c in df.columns if c.strip().lower() in helper_names]
 
+        # คอลัมน์ภายในที่ต้องซ่อนจาก UI
+        internal_hide = {
+            "__Term_HTML__", "Image_Groups_Resolved", "Image_Groups",
+            "Image Path Resolved", "Image Path", "_HasImage", "Language List"
+        }
+
         # จัดลำดับเฉพาะคอลัมน์ที่จะแสดง (ไม่รวม helper)
         ordered = [ c for c in preferred if c in df.columns]
         tail = [c for c in df.columns if c not in ordered + helper_cols]
+
+        # ตัด internal ออกจากรายการแสดงผล
+        tail = [c for c in tail if c not in internal_hide]
         df_ui = df.loc[:, ordered + tail]
 
         # ตั้งค่าตาราง
@@ -321,7 +332,7 @@ class DSOApp(QtWidgets.QWidget):
                         
                     def _safe_text(x):
                             s = "" if x is None else str(x).strip()
-                            if s.lower() in ("nan", "none"):  # กัน nan/none โผล่
+                            if s.lower() in ("nan", "none", "-"):  # กัน nan/none/- โผล่
                                 return ""
                             return s
 
@@ -332,11 +343,21 @@ class DSOApp(QtWidgets.QWidget):
 
                     # สร้าง QLabel สำหรับข้อความ
                     term_label = QtWidgets.QLabel()
-                    term_label.setWordWrap(True)
+                    term_label.setWordWrap(False)
+                    self.result_table.horizontalHeader().setSectionResizeMode(col_idx, QtWidgets.QHeaderView.ResizeToContents)
                     term_label.setTextFormat(QtCore.Qt.RichText)
                     term_label.setTextInteractionFlags(Qt.TextBrowserInteraction)
-                    term_label.setAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
+                    term_label.setAlignment(QtCore.Qt.AlignVCenter)
                     term_label.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.MinimumExpanding)
+
+                    def _clean_html(s: str) -> str:
+                        if not s:
+                            return ""
+                        s = s.strip()
+                        if s.lower() in ("nan", "none", "-"):
+                            return ""
+                        plain = re.sub(r"<[^>]+>", "", s).strip()
+                        return "" if plain == "" or plain.lower() in ("nan", "none", "-") else s
 
                     # อ่าน HTML จากแถวนี้ (ลอง __Term_HTML__ ก่อน แล้วค่อย Term_Underline_HTML)
                     html_val = ""
@@ -346,12 +367,21 @@ class DSOApp(QtWidgets.QWidget):
                             html_val = v.strip()
                             break
 
-                     # fallback เมื่อไม่มี HTML
-                    if not term_text:
-                        term_text = "" if has_images else "-"
+                    html_val = _clean_html(html_val)
 
-                    # เลือก text ที่จะเซ็ต (HTML มาก่อน)
-                    display_text = html_val if html_val else term_text
+                    # fallback เมื่อไม่มี HTML
+                    def _has_content(s: str) -> bool:
+                        return bool(s) and s.strip() !=""
+
+                    text_has_content = _has_content(term_text)
+                    html_has_content = _has_content(html_val)
+
+                    if html_has_content:
+                        display_text = html_val
+                    elif text_has_content:
+                        display_text = term_text
+                    else:
+                        display_text = "" if has_images else "-"
 
                     # log ช่วยดีบัก
                     logging.info(f"[UI] row {row_idx} HTML? {bool(html_val)} / text='{(term_text[:60]+'...') if term_text and len(term_text)>60 else term_text}' / imgs={len(groups) if groups else 0}")
@@ -370,7 +400,7 @@ class DSOApp(QtWidgets.QWidget):
                     outer = QtWidgets.QVBoxLayout(container)
                     outer.setContentsMargins(6, 6, 6, 6)
                     outer.setSpacing(8)
-                    outer.setAlignment(QtCore.Qt.AlignVCenter)
+                    outer.setAlignment(QtCore.Qt.AlignCenter)
 
                     # วางข้อความครั้งเดียว (ห้าม add ซ้ำ)
                     outer.addWidget(term_label, 0, QtCore.Qt.AlignVCenter)
@@ -408,8 +438,17 @@ class DSOApp(QtWidgets.QWidget):
                                 else:
                                     lbl = QtWidgets.QLabel()
                                     lbl.setAlignment(QtCore.Qt.AlignHCenter | QtCore.Qt.AlignVCenter)
-                                    lbl.setPixmap(pm.scaledToWidth(200, QtCore.Qt.SmoothTransformation))
+
+                                    # ลดเฉพาะรูปโลโก้/มาร์ก เท่านั้น
+                                    p_low   = os.path.basename(p).lower()
+                                    req_low = req_text.lower()
+                                    is_logo = any(k in p_low for k in ("logo", "mark", "lion", "ce ", "ukca", "mc "))
+                                    is_logo = is_logo or any(k in req_low for k in ("logo", "mark", "lion", "ce ", "ukca", "mc "))
+
+                                    target_w = 120 if is_logo else 240
+                                    lbl.setPixmap(pm.scaledToWidth(target_w, QtCore.Qt.SmoothTransformation))
                                     img_vbox.addWidget(lbl, 0, QtCore.Qt.AlignHCenter | QtCore.Qt.AlignVCenter)
+
 
                             outer.addWidget(img_wrap, 0, QtCore.Qt.AlignHCenter | QtCore.Qt.AlignVCenter)
 
@@ -515,15 +554,40 @@ class DSOApp(QtWidgets.QWidget):
             QtWidgets.QMessageBox.information(self, "Search", "No results to search.")
             return
 
-        found = False
+        q = query.lower()
+
+        # helper: ตัดแท็ก HTML ออกจาก QLabel (RichText)
+        def _plain_text_from_html(s: str) -> str:
+            if not isinstance(s, str):
+                return ""
+            return re.sub(r"<[^>]+>", "", s).strip()
+
+        # ค้นหาทั้ง QTableWidgetItem และ cellWidget(QLabel)
         for row in range(self.result_table.rowCount()):
             for col in range(self.result_table.columnCount()):
+                hit = False
+
                 item = self.result_table.item(row, col)
-                if item and query.lower() in item.text().lower():
+                if item:
+                    txt = item.text() or ""
+                    if q in txt.lower():
+                        hit = True
+
+                if not hit:
+                    w = self.result_table.cellWidget(row, col)
+                    if w:
+
+                        labels = w.findChildren(QtWidgets.QLabel)
+                        for lbl in labels:
+                            txt = _plain_text_from_html(lbl.text()).lower()
+                            if q in txt:
+                                hit = True
+                                break
+                            
+                if hit:
                     self.result_table.setCurrentCell(row, col)
-                    self.result_table.scrollToItem(item)
-                    found = True
+                    index = self.result_table.model().index(row, col)
+                    self.result_table.scrollTo(index, QtWidgets.QAbstractItemView.PositionAtCenter)
                     return
 
-        if not found:
-            QtWidgets.QMessageBox.information(self, "Search", f"'{query}' not found in results.")
+        QtWidgets.QMessageBox.information(self, "Search", f"'{query}' not found in results.")

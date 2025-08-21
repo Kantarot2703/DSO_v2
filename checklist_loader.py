@@ -155,30 +155,40 @@ def normalize_text(text):
 
 def extract_underlines_from_excel(excel_path, sheet_name, header_row_index, df):
     """
-    อ่านรูปแบบตัวอักษรจากคอลัมน์ Symbol/Exact wording ใน Excel
-    - รองรับ rich text: underline/ bold เฉพาะบางช่วงคำ
-    - ถ้าไม่มี rich runs จะ fallback ตาม font ของทั้ง cell
-    คืนค่า: เพิ่มคอลัมน์ __Term_HTML__ (HTML พร้อม <u>, <b>)
+    อ่านรูปแบบตัวอักษรจากคอลัมน์ Symbol/Exact wording ใน Excel ให้ตรงแถวจริง
+    - พยายามอ่าน rich runs; ถ้าไม่ได้ ใช้ font ทั้ง cell
+    - จับคู่แถว df กับ worksheet ด้วยข้อความในคอลัมน์ Term ภายในหน้าต่างเล็กๆ
+    คืนค่า: เพิ่มคอลัมน์ __Term_HTML__ (HTML พร้อม <u>, <b>), ใช้ <br> แทน \n
     """
     try:
-        # ต้องมีคอลัมน์ Symbol/Exact wording ก่อน
-        if "Symbol/Exact wording" not in df.columns:
-            df["__Term_HTML__"] = df.get("Symbol/Exact wording", "").astype(str)
+        # รองรับชื่อคอลัมน์ 2 แบบ
+        term_col_name = None
+        for cand in ["Symbol/Exact wording", "Symbol/ Exact wording"]:
+            if cand in df.columns:
+                term_col_name = cand
+                break
+        if not term_col_name:
+            df["__Term_HTML__"] = df.get("Symbol/Exact wording", df.get("Symbol/ Exact wording", "")).astype(str)
             return df
 
+        from openpyxl import load_workbook
         wb = load_workbook(excel_path, data_only=False)
         ws = wb[sheet_name]
 
-        term_col_idx = list(df.columns).index("Symbol/Exact wording") + 1
-        start_row = header_row_index + 2  # แถวแรกของข้อมูลจริง
+        # header_row_index คือแถวหัวตาราง (0-based บน df)
+        # แถวข้อมูลแรกในชีตโดยประมาณ:
+        approx_start_row = header_row_index + 2  # เดิม
+        term_col_idx = list(df.columns).index(term_col_name) + 1
+
+        import html as _html
+        import logging, re
 
         def _cell_rich_to_html(cell, plain_text: str) -> str:
-            """พยายามอ่าน rich runs; ถ้าไม่ได้ให้ fallback ตาม font ทั้ง cell"""
-            txt_plain = html.escape(plain_text or "")
+            txt_plain = _html.escape(plain_text or "")
 
-            # 1) พยายามอ่าน rich text runs
+            # 1) พยายามอ่าน rich runs
             try:
-                val = cell.value  # บางเวอร์ชันเป็น rich text object
+                val = cell.value
                 runs = []
                 if hasattr(val, "rich") and val.rich:
                     runs = val.rich
@@ -188,28 +198,21 @@ def extract_underlines_from_excel(excel_path, sheet_name, header_row_index, df):
                 if runs:
                     parts = []
                     for r in runs:
-                        # ดึงข้อความ
                         t = getattr(r, "text", None)
                         if t is None:
                             t = str(r)
-                        t_html = html.escape(str(t))
+                        t_html = _html.escape(str(t))
 
-                        # ดึง style ถ้าได้
                         f = getattr(r, "font", None)
                         is_bold = bool(getattr(f, "bold", False)) if f else False
                         is_ul   = bool(getattr(f, "underline", False)) if f else False
 
-                        if is_bold:
-                            t_html = f"<b>{t_html}</b>"
-                        if is_ul:
-                            t_html = f"<u>{t_html}</u>"
-
+                        if is_bold: t_html = f"<b>{t_html}</b>"
+                        if is_ul:   t_html = f"<u>{t_html}</u>"
                         parts.append(t_html)
-
-                    # รวมเป็น HTML เดียว (คงลำดับตาม runs)
                     return "".join(parts)
             except Exception as e:
-                logging.debug(f"rich runs parse failed: {e}")
+                logging.debug(f"[underline] rich runs parse failed: {e}")
 
             # 2) Fallback: ใช้ font ของทั้ง cell
             try:
@@ -221,19 +224,57 @@ def extract_underlines_from_excel(excel_path, sheet_name, header_row_index, df):
                         txt_plain = f"<u>{txt_plain}</u>"
             except Exception:
                 pass
-
             return txt_plain
 
+        def _norm(s):
+            return ("" if s is None else str(s)).replace("\r", "").strip()
+
+        # ---- คำนวณออฟเซ็ตจริงด้วยการจับคู่ข้อความในคอลัมน์ Term ----
+        # เอาแถวแรกๆ 3–5 แถวจาก df ไปไล่หาในชีต เพื่อหา delta ระหว่าง approx_start_row กับแถวจริง
+        probe_window = 6
+        delta_candidates = []
+        for i in range(min(len(df), probe_window)):
+            df_txt = _norm(df.iloc[i].get(term_col_name, ""))
+            if not df_txt:
+                continue
+            # ไล่หาในชีตรอบๆ approx_start_row+i ภายใน ±5 แถว
+            center = approx_start_row + i
+            found_delta = None
+            for d in range(-5, 6):
+                r = center + d
+                if r < 1:
+                    continue
+                cell_txt = _norm(ws.cell(row=r, column=term_col_idx).value)
+                if cell_txt == df_txt:
+                    found_delta = d
+                    break
+            if found_delta is not None:
+                delta_candidates.append(found_delta)
+
+        real_start_row = approx_start_row
+        if delta_candidates:
+            # ใช้ค่ากึ่งกลางเพื่อกัน outlier
+            delta_candidates.sort()
+            real_delta = delta_candidates[len(delta_candidates)//2]
+            real_start_row = approx_start_row + real_delta
+
+        logging.info(f"[underline] approx_start_row={approx_start_row}, real_start_row={real_start_row}")
+
+        # ---- สร้าง HTML ตามแถวจริง ----
         html_list = []
         for i in range(len(df)):
-            cell = ws.cell(row=start_row + i, column=term_col_idx)
-            text_val = str(df.iloc[i].get("Symbol/Exact wording", "") or "")
+            ws_row = real_start_row + i
+            cell = ws.cell(row=ws_row, column=term_col_idx)
+            text_val = _norm(df.iloc[i].get(term_col_name, ""))
             html_list.append(_cell_rich_to_html(cell, text_val))
 
-        df["__Term_HTML__"] = [
-            (h or "").replace("\r", "").replace("\n", "<br>")
-            for h in html_list
-        ]
+        df["__Term_HTML__"] = [(h or "").replace("\r", "").replace("\n", "<br>") for h in html_list]
+        return df
+
+    except Exception as e:
+        logging.debug(f"Underline extraction failed: {e}")
+        term_col_name = "Symbol/Exact wording" if "Symbol/Exact wording" in df.columns else "Symbol/ Exact wording"
+        df["__Term_HTML__"] = df.get(term_col_name, "").astype(str)
         return df
 
     except Exception as e:
@@ -519,10 +560,6 @@ def load_checklist(excel_path, pdf_filename=None):
 
                 df["ExcelRow"] = df.index + header_row_index + 2 
                 df.drop(columns=["ExcelRow"], inplace=True)
-
-                # Drop columns ที่ไม่ใช้
-                columns_to_exclude = ["Instruction of Play function feature", "Warning statement"]
-                df = df[[col for col in df.columns if col and str(col).strip().lower() not in columns_to_exclude]]
 
                 df = extract_underlines_from_excel(excel_path, sheet_name, header_row_index, df)
                 
@@ -841,7 +878,7 @@ def start_check(df_checklist, extracted_text_list):
     for (requirement, spec, verification), items in grouped.items():
         for item in items:
             term_display = item.get("Term", "")
-            if pd.isna(term_display) or str(term_display).strip().lower() in ["", "nan"]:
+            if pd.isna(term_display) or str(term_display).strip().lower() in ["", "nan", "-", "none"]:
                 term_display = "-"
             final_results.append({
                 "Requirement": requirement,
