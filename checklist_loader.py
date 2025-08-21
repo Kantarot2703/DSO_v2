@@ -861,8 +861,4 @@ def start_check(df_checklist, extracted_text_list):
                 "Image_Groups_Resolved": item.get("Image_Groups_Resolved", []),
             })
 
-            logging.info(f"[CHK] final_results count: {len(final_results)}")
-            logging.info(f"[CHK] __Term_HTML__ sample: {[item.get('__Term_HTML__', '') for item in final_results[:3]]}")
-            logging.info(f"[CHK] Image_Groups_Resolved sample: {[item.get('Image_Groups_Resolved', []) for item in final_results[:2]]}")
-
     return pd.DataFrame(final_results)

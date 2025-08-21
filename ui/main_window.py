@@ -318,26 +318,25 @@ class DSOApp(QtWidgets.QWidget):
                 if header == "Symbol/ Exact wording":
                     req_text  = str(row_src.get("Requirement", "")).strip()
                     term_text = str(value).strip()
+                        
+                    def _safe_text(x):
+                            s = "" if x is None else str(x).strip()
+                            if s.lower() in ("nan", "none"):  # กัน nan/none โผล่
+                                return ""
+                            return s
+
+                    term_text = _safe_text(term_text)
+
                     groups = row_src.get("Image_Groups_Resolved") or row_src.get("Image_Groups") or []
-
-                    container = QtWidgets.QWidget()
-                    outer = QtWidgets.QVBoxLayout(container)
-                    outer.setContentsMargins(6, 6, 6, 6)
-                    outer.setSpacing(8)
-
                     has_images = bool(groups and any(g.get("paths") for g in groups))
-                    text_clean = term_text if term_text not in ["-", "nan", "None"] else ""
-
-                    if text_clean == "":
-                        term_display = "" if has_images else "-"
-                    else:
-                        term_display = text_clean
 
                     # สร้าง QLabel สำหรับข้อความ
                     term_label = QtWidgets.QLabel()
                     term_label.setWordWrap(True)
                     term_label.setTextFormat(QtCore.Qt.RichText)
-                    term_label.setTextInteractionFlags(Qt.TextBrowserInteraction)  # ให้ <br> / ลิงก์ทำงาน
+                    term_label.setTextInteractionFlags(Qt.TextBrowserInteraction)
+                    term_label.setAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
+                    term_label.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.MinimumExpanding)
 
                     # อ่าน HTML จากแถวนี้ (ลอง __Term_HTML__ ก่อน แล้วค่อย Term_Underline_HTML)
                     html_val = ""
@@ -347,16 +346,18 @@ class DSOApp(QtWidgets.QWidget):
                             html_val = v.strip()
                             break
 
-                    # ข้อความ fallback เมื่อไม่มี HTML
-                    term_text = str(value).strip()
-                    if not term_text or term_text in ["-", "nan", "None"]:
-                        has_images = bool(groups and any(g.get("paths") for g in groups))
+                     # fallback เมื่อไม่มี HTML
+                    if not term_text:
                         term_text = "" if has_images else "-"
 
-                    logging.info(f"[UI] row {row_idx} __Term_HTML__ short: { (html_val[:80] + '...') if html_val else '<empty>' }")
-                    logging.info(f"[UI] row {row_idx} groups-len: {len(groups) if groups else 0}")
+                    # เลือก text ที่จะเซ็ต (HTML มาก่อน)
+                    display_text = html_val if html_val else term_text
 
-                    term_label.setText(html_val if html_val else term_text)
+                    # log ช่วยดีบัก
+                    logging.info(f"[UI] row {row_idx} HTML? {bool(html_val)} / text='{(term_text[:60]+'...') if term_text and len(term_text)>60 else term_text}' / imgs={len(groups) if groups else 0}")
+
+                    # ตั้งค่า label ครั้งเดียว
+                    term_label.setText(display_text)
 
                     # ถ้า Not Found ให้เป็นสีแดง (คงของเดิม)
                     if str(row_ui.get("Found", "")).startswith("❌"):
@@ -364,39 +365,33 @@ class DSOApp(QtWidgets.QWidget):
                     else:
                         term_label.setStyleSheet("")
 
-                    outer.addWidget(term_label)
-                    container.setLayout(outer)
-                    self.result_table.setCellWidget(row_idx, col_idx, container)
+                    # สร้าง container widget สำหรับ cell นี้
+                    container = QtWidgets.QWidget()
+                    outer = QtWidgets.QVBoxLayout(container)
+                    outer.setContentsMargins(6, 6, 6, 6)
+                    outer.setSpacing(8)
+                    outer.setAlignment(QtCore.Qt.AlignVCenter)
 
-                    # ตรวจว่าเป็นข้อความบรรทัดเดียวและไม่มีรูป
-                    single_line = ("\n" not in term_text) and (len(term_text) > 0)
-                    has_images  = bool(groups and any(g.get("paths") for g in groups))
+                    # วางข้อความครั้งเดียว (ห้าม add ซ้ำ)
+                    outer.addWidget(term_label, 0, QtCore.Qt.AlignVCenter)
 
-                    if single_line and not has_images:
-                        term_label.setAlignment(QtCore.Qt.AlignHCenter | QtCore.Qt.AlignVCenter)
-                        outer.addStretch(1)
-                        outer.addWidget(term_label, 0, QtCore.Qt.AlignHCenter)
-                        outer.addStretch(1)
-                    else:
-                        term_label.setAlignment(QtCore.Qt.AlignHCenter | QtCore.Qt.AlignTop)
-                        outer.addWidget(term_label, 0, QtCore.Qt.AlignHCenter)
-
-                    # รูปล่าง(กึ่งกลาง + margin บน-ล่าง)
-                    if groups:
-                        paths = []
+                    # รูป (หากมี) จัดให้อยู่กึ่งกลางแนวตั้ง/แนวนอน
+                    if has_images:
+                        all_paths = []
                         for g in groups:
-                            paths.extend(g.get("paths", []))
+                            all_paths.extend(g.get("paths", []))
 
                         if not hasattr(self, "_image_cache"):
                             self._image_cache = {}
 
-                        if paths:
+                        if all_paths:
                             img_wrap = QtWidgets.QWidget()
                             img_vbox = QtWidgets.QVBoxLayout(img_wrap)
-                            img_vbox.setContentsMargins(0, 8, 0, 8)  
+                            img_vbox.setContentsMargins(0, 8, 0, 8)
                             img_vbox.setSpacing(8)
+                            img_vbox.setAlignment(QtCore.Qt.AlignHCenter | QtCore.Qt.AlignVCenter)
 
-                            for p in paths:
+                            for p in all_paths:
                                 if not p:
                                     continue
                                 pm = self._image_cache.get(p)
@@ -408,17 +403,26 @@ class DSOApp(QtWidgets.QWidget):
                                 if not pm:
                                     miss = QtWidgets.QLabel(f"[!] Missing image: {p}")
                                     miss.setStyleSheet("color:#b91c1c;")
-                                    miss.setAlignment(QtCore.Qt.AlignHCenter)
-                                    img_vbox.addWidget(miss, 0, QtCore.Qt.AlignHCenter)
+                                    miss.setAlignment(QtCore.Qt.AlignHCenter | QtCore.Qt.AlignVCenter)
+                                    img_vbox.addWidget(miss, 0, QtCore.Qt.AlignHCenter | QtCore.Qt.AlignVCenter)
                                 else:
                                     lbl = QtWidgets.QLabel()
-                                    lbl.setAlignment(QtCore.Qt.AlignHCenter)
+                                    lbl.setAlignment(QtCore.Qt.AlignHCenter | QtCore.Qt.AlignVCenter)
                                     lbl.setPixmap(pm.scaledToWidth(200, QtCore.Qt.SmoothTransformation))
-                                    img_vbox.addWidget(lbl, 0, QtCore.Qt.AlignHCenter)
+                                    img_vbox.addWidget(lbl, 0, QtCore.Qt.AlignHCenter | QtCore.Qt.AlignVCenter)
 
-                            outer.addWidget(img_wrap, 0, QtCore.Qt.AlignHCenter)
+                            outer.addWidget(img_wrap, 0, QtCore.Qt.AlignHCenter | QtCore.Qt.AlignVCenter)
 
+                    container.setLayout(outer)
                     self.result_table.setCellWidget(row_idx, col_idx, container)
+
+                    self.result_table.resizeRowToContents(row_idx)
+
+                    # หากตารางมีสไตล์ที่บังคับความสูงไว้ ใช้ sizeHint เป็น fallback
+                    need_h = max(container.sizeHint().height(), 28)
+                    if self.result_table.rowHeight(row_idx) < need_h:
+                        self.result_table.setRowHeight(row_idx, need_h)
+
                     continue
 
                 # Remark คอลัมน์เดียว แต่คลิกได้ถ้ามีลิงก์จาก Excel; ถ้าไม่มีให้ linkify/หรือ "-" ; จัดกึ่งกลาง 

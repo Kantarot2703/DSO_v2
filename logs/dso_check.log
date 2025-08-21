@@ -1,143 +1,68 @@
-2025-08-20 15:22:54,129 | INFO | root | 📂 PDF filename: JCP34_JCP35_LA-CONVENTION_25HW_DOM_A5_Approved.pdf
-2025-08-20 15:22:54,130 | INFO | root | 🧠 Part codes detected: ['DOM']
-2025-08-20 15:22:54,130 | INFO | root | 📄 Sheet names: ['DOM', '4LB']
-2025-08-20 15:22:54,130 | INFO | root | ✅ Found matching sheet: DOM
-2025-08-20 15:22:54,138 | INFO | root | 🧾 Header chosen at row 2 | columns: ['Check list', 'Requirement', 'Symbol/  Exact wording', 'Specification', 'Package Panel', 'Procedure']...
-2025-08-20 15:22:54,139 | INFO | root | 🧾 Columns found in sheet: ['Check list', 'Requirement', 'Symbol/  Exact wording', 'Specification', 'Package Panel', 'Procedure', 'Remark', 'Image Match', 'Image Path']
-2025-08-20 15:22:54,140 | INFO | root | 🛟 Fallback columns → Term: Symbol/  Exact wording, Language: None, Spec: Requirement
-2025-08-20 15:22:54,140 | INFO | root | 🔎 ใช้คอลัมน์ Term: Symbol/  Exact wording, Language: None, Spec: Requirement
-2025-08-20 15:22:57,324 | INFO | checklist_loader | 📄 Artwork-like pages considered: 2 (real pages: [1, 2])
-2025-08-20 15:22:57,327 | INFO | checklist_loader | ✅ [FOUND] Req: 'Language code' | Term: 'DOM or UU1' | Pages: All pages | Match: ✔ | Font: - | Notes: -
-2025-08-20 15:22:57,328 | WARNING | checklist_loader | ❌ [NOT FOUND] Req: 'Age grade 3+
+2025-08-21 07:55:39,671 | INFO | root | 📂 PDF filename: JCP34_JCP35_LA-CONVENTION_25HW_DOM_A5_Approved.pdf
+2025-08-21 07:55:39,671 | INFO | root | 🧠 Part codes detected: ['DOM']
+2025-08-21 07:55:39,671 | INFO | root | 📄 Sheet names: ['DOM', '4LB']
+2025-08-21 07:55:39,672 | INFO | root | ✅ Found matching sheet: DOM
+2025-08-21 07:55:39,673 | INFO | root | 🧾 Header chosen at row 2 | columns: ['Check list', 'Requirement', 'Symbol/  Exact wording', 'Specification', 'Package Panel', 'Procedure']...
+2025-08-21 07:55:39,673 | INFO | root | 🧾 Columns found in sheet: ['Check list', 'Requirement', 'Symbol/  Exact wording', 'Specification', 'Package Panel', 'Procedure', 'Remark', 'Image Match', 'Image Path']
+2025-08-21 07:55:39,673 | INFO | root | 🛟 Fallback columns → Term: Symbol/  Exact wording, Language: None, Spec: Requirement
+2025-08-21 07:55:39,673 | INFO | root | 🔎 ใช้คอลัมน์ Term: Symbol/  Exact wording, Language: None, Spec: Requirement
+2025-08-21 07:55:40,826 | INFO | checklist_loader | 📄 Artwork-like pages considered: 2 (real pages: [1, 2])
+2025-08-21 07:55:40,828 | INFO | checklist_loader | ✅ [FOUND] Req: 'Language code' | Term: 'DOM or UU1' | Pages: All pages | Match: ✔ | Font: - | Notes: -
+2025-08-21 07:55:40,829 | WARNING | checklist_loader | ❌ [NOT FOUND] Req: 'Age grade 3+
 (All markets)' | Term tried: '3+'
-2025-08-20 15:22:57,329 | INFO | checklist_loader | ✅ [FOUND] Req: 'Country of origin
+2025-08-21 07:55:40,829 | INFO | checklist_loader | ✅ [FOUND] Req: 'Country of origin
 (All markets)' | Term: 'MADE IN THAILAND' | Pages: All pages | Match: ❌ | Font: - | Notes: Not Bold
-2025-08-20 15:22:57,330 | INFO | checklist_loader | ✅ [FOUND] Req: 'Address
+2025-08-21 07:55:40,829 | INFO | checklist_loader | ✅ [FOUND] Req: 'Address
 (EU)' | Term: 'Manufactured, imported or distributed by:
 Mattel Europa B.V., Gondel 1, 1186 MJ Amstelveen, Nederland.' | Pages: All pages | Match: ❌ | Font: - | Notes: Underline Missing
-2025-08-20 15:22:57,332 | INFO | checklist_loader | ✅ [FOUND] Req: 'ASTM requirement
+2025-08-21 07:55:40,831 | INFO | checklist_loader | ✅ [FOUND] Req: 'ASTM requirement
 (USA)' | Term: 'CONFORMS TO THE SAFETY REQUIREMENTS OF ASTM F963.' | Pages: All pages | Match: ✔ | Font: ✔ | Notes: -
-2025-08-20 15:22:57,333 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'Space for Date code
+2025-08-21 07:55:40,832 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'Space for Date code
 (All markets)' | Spec: 'Must not cover any text and illustration' → Manual verification
-2025-08-20 15:22:57,334 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'Lion mark
+2025-08-21 07:55:40,832 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'Lion mark
 (All markets)' | Spec: '≥ 5 mm.' → Manual verification
-2025-08-20 15:22:57,335 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'CE mark
+2025-08-21 07:55:40,832 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'CE mark
 (All markets)' | Spec: '≥ 5 mm.' → Manual verification
-2025-08-20 15:22:57,336 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'UKCA mark
+2025-08-21 07:55:40,833 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'UKCA mark
 (All markets)' | Spec: '≥ 5 mm.' → Manual verification
-2025-08-20 15:22:57,337 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'MC  mark
+2025-08-21 07:55:40,833 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'MC  mark
 (All markets)' | Spec: '≥ 5x5 mm.
 (Exclude numbers under MC )' → Manual verification
-2025-08-20 15:22:57,338 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'CIB: Consumer Information Block
+2025-08-21 07:55:40,833 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'CIB: Consumer Information Block
 (All markets)' | Spec: 'must be located near the legal copy' → Manual verification
-2025-08-20 15:22:57,340 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'International
+2025-08-21 07:55:40,834 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'International
  warning statement
 (All markets)' | Spec: 'SYMBOL ≥ 10 mm
 TEXT ≥ 1.5 mm' → Manual verification
-2025-08-20 15:22:57,341 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'International
+2025-08-21 07:55:40,834 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'International
  warning statement
 (All markets)' | Spec: 'SYMBOL ≥ 10 mm
 TEXT ≥ 1.5 mm' → Manual verification
-2025-08-20 15:22:57,342 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'UPC requirement
+2025-08-21 07:55:40,834 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'UPC requirement
 (All markets)' | Spec: 'Size of UPC Barcode depend on area panel' → Manual verification
-2025-08-20 15:22:57,343 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'List of content : Text
+2025-08-21 07:55:40,834 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'List of content : Text
 (All market)' | Spec: 'Internation requriement: A list of contents is required when the product is in a closed package where the actual contents are not
 visible.' → Manual verification
-2025-08-20 15:22:57,344 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'List of content : 
+2025-08-21 07:55:40,835 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'List of content : 
 pictorial
 (All markets)' | Spec: 'Internation requriement:  A pictorial (photo or graphic art) list of contents of the package contents may be used.' → Manual verification
-2025-08-20 15:22:57,346 | INFO | root | [CHK] final_results count: 1
-2025-08-20 15:22:57,346 | INFO | root | [CHK] __Term_HTML__ sample: ['DOM or UU1']
-2025-08-20 15:22:57,347 | INFO | root | [CHK] Image_Groups_Resolved sample: [[]]
-2025-08-20 15:22:57,348 | INFO | root | [CHK] final_results count: 2
-2025-08-20 15:22:57,349 | INFO | root | [CHK] __Term_HTML__ sample: ['DOM or UU1', '3+']
-2025-08-20 15:22:57,349 | INFO | root | [CHK] Image_Groups_Resolved sample: [[], []]
-2025-08-20 15:22:57,350 | INFO | root | [CHK] final_results count: 3
-2025-08-20 15:22:57,351 | INFO | root | [CHK] __Term_HTML__ sample: ['DOM or UU1', '3+', 'nan']
-2025-08-20 15:22:57,352 | INFO | root | [CHK] Image_Groups_Resolved sample: [[], []]
-2025-08-20 15:22:57,352 | INFO | root | [CHK] final_results count: 4
-2025-08-20 15:22:57,353 | INFO | root | [CHK] __Term_HTML__ sample: ['DOM or UU1', '3+', 'nan']
-2025-08-20 15:22:57,354 | INFO | root | [CHK] Image_Groups_Resolved sample: [[], []]
-2025-08-20 15:22:57,354 | INFO | root | [CHK] final_results count: 5
-2025-08-20 15:22:57,355 | INFO | root | [CHK] __Term_HTML__ sample: ['DOM or UU1', '3+', 'nan']
-2025-08-20 15:22:57,356 | INFO | root | [CHK] Image_Groups_Resolved sample: [[], []]
-2025-08-20 15:22:57,356 | INFO | root | [CHK] final_results count: 6
-2025-08-20 15:22:57,356 | INFO | root | [CHK] __Term_HTML__ sample: ['DOM or UU1', '3+', 'nan']
-2025-08-20 15:22:57,358 | INFO | root | [CHK] Image_Groups_Resolved sample: [[], []]
-2025-08-20 15:22:57,359 | INFO | root | [CHK] final_results count: 7
-2025-08-20 15:22:57,359 | INFO | root | [CHK] __Term_HTML__ sample: ['DOM or UU1', '3+', 'nan']
-2025-08-20 15:22:57,360 | INFO | root | [CHK] Image_Groups_Resolved sample: [[], []]
-2025-08-20 15:22:57,360 | INFO | root | [CHK] final_results count: 8
-2025-08-20 15:22:57,360 | INFO | root | [CHK] __Term_HTML__ sample: ['DOM or UU1', '3+', 'nan']
-2025-08-20 15:22:57,361 | INFO | root | [CHK] Image_Groups_Resolved sample: [[], []]
-2025-08-20 15:22:57,362 | INFO | root | [CHK] final_results count: 9
-2025-08-20 15:22:57,362 | INFO | root | [CHK] __Term_HTML__ sample: ['DOM or UU1', '3+', 'nan']
-2025-08-20 15:22:57,363 | INFO | root | [CHK] Image_Groups_Resolved sample: [[], []]
-2025-08-20 15:22:57,363 | INFO | root | [CHK] final_results count: 10
-2025-08-20 15:22:57,364 | INFO | root | [CHK] __Term_HTML__ sample: ['DOM or UU1', '3+', 'nan']
-2025-08-20 15:22:57,365 | INFO | root | [CHK] Image_Groups_Resolved sample: [[], []]
-2025-08-20 15:22:57,365 | INFO | root | [CHK] final_results count: 11
-2025-08-20 15:22:57,366 | INFO | root | [CHK] __Term_HTML__ sample: ['DOM or UU1', '3+', 'nan']
-2025-08-20 15:22:57,366 | INFO | root | [CHK] Image_Groups_Resolved sample: [[], []]
-2025-08-20 15:22:57,367 | INFO | root | [CHK] final_results count: 12
-2025-08-20 15:22:57,368 | INFO | root | [CHK] __Term_HTML__ sample: ['DOM or UU1', '3+', 'nan']
-2025-08-20 15:22:57,368 | INFO | root | [CHK] Image_Groups_Resolved sample: [[], []]
-2025-08-20 15:22:57,370 | INFO | root | [CHK] final_results count: 13
-2025-08-20 15:22:57,370 | INFO | root | [CHK] __Term_HTML__ sample: ['DOM or UU1', '3+', 'nan']
-2025-08-20 15:22:57,371 | INFO | root | [CHK] Image_Groups_Resolved sample: [[], []]
-2025-08-20 15:22:57,371 | INFO | root | [CHK] final_results count: 14
-2025-08-20 15:22:57,372 | INFO | root | [CHK] __Term_HTML__ sample: ['DOM or UU1', '3+', 'nan']
-2025-08-20 15:22:57,373 | INFO | root | [CHK] Image_Groups_Resolved sample: [[], []]
-2025-08-20 15:22:57,374 | INFO | root | [CHK] final_results count: 15
-2025-08-20 15:22:57,374 | INFO | root | [CHK] __Term_HTML__ sample: ['DOM or UU1', '3+', 'nan']
-2025-08-20 15:22:57,375 | INFO | root | [CHK] Image_Groups_Resolved sample: [[], []]
-2025-08-20 15:22:57,376 | INFO | root | [CHK] final_results count: 16
-2025-08-20 15:22:57,376 | INFO | root | [CHK] __Term_HTML__ sample: ['DOM or UU1', '3+', 'nan']
-2025-08-20 15:22:57,377 | INFO | root | [CHK] Image_Groups_Resolved sample: [[], []]
-2025-08-20 15:22:57,378 | INFO | root | [CHK] final_results count: 17
-2025-08-20 15:22:57,378 | INFO | root | [CHK] __Term_HTML__ sample: ['DOM or UU1', '3+', 'nan']
-2025-08-20 15:22:57,379 | INFO | root | [CHK] Image_Groups_Resolved sample: [[], []]
-2025-08-20 15:22:57,380 | INFO | root | [CHK] final_results count: 18
-2025-08-20 15:22:57,380 | INFO | root | [CHK] __Term_HTML__ sample: ['DOM or UU1', '3+', 'nan']
-2025-08-20 15:22:57,381 | INFO | root | [CHK] Image_Groups_Resolved sample: [[], []]
-2025-08-20 15:22:57,382 | INFO | root | [CHK] final_results count: 19
-2025-08-20 15:22:57,382 | INFO | root | [CHK] __Term_HTML__ sample: ['DOM or UU1', '3+', 'nan']
-2025-08-20 15:22:57,383 | INFO | root | [CHK] Image_Groups_Resolved sample: [[], []]
-2025-08-20 15:22:57,426 | INFO | root | [UI] row 0 __Term_HTML__ short: DOM or UU1...
-2025-08-20 15:22:57,427 | INFO | root | [UI] row 0 groups-len: 0
-2025-08-20 15:22:57,469 | INFO | root | [UI] row 1 __Term_HTML__ short: 3+...
-2025-08-20 15:22:57,470 | INFO | root | [UI] row 1 groups-len: 0
-2025-08-20 15:22:57,480 | INFO | root | [UI] row 2 __Term_HTML__ short: nan...
-2025-08-20 15:22:57,480 | INFO | root | [UI] row 2 groups-len: 1
-2025-08-20 15:22:57,642 | INFO | root | [UI] row 3 __Term_HTML__ short: nan...
-2025-08-20 15:22:57,643 | INFO | root | [UI] row 3 groups-len: 1
-2025-08-20 15:22:57,719 | INFO | root | [UI] row 4 __Term_HTML__ short: MADE IN THAILAND...
-2025-08-20 15:22:57,720 | INFO | root | [UI] row 4 groups-len: 0
-2025-08-20 15:22:57,730 | INFO | root | [UI] row 5 __Term_HTML__ short: <b>Manufactured, imported or distributed by:<br>Mattel Europa B.V., Gondel 1, 11...
-2025-08-20 15:22:57,731 | INFO | root | [UI] row 5 groups-len: 0
-2025-08-20 15:22:57,747 | INFO | root | [UI] row 6 __Term_HTML__ short: CONFORMS TO THE SAFETY REQUIREMENTS OF ASTM F963....
-2025-08-20 15:22:57,748 | INFO | root | [UI] row 6 groups-len: 0
-2025-08-20 15:22:57,759 | INFO | root | [UI] row 7 __Term_HTML__ short: nan...
-2025-08-20 15:22:57,760 | INFO | root | [UI] row 7 groups-len: 1
-2025-08-20 15:22:57,809 | INFO | root | [UI] row 8 __Term_HTML__ short: nan...
-2025-08-20 15:22:57,810 | INFO | root | [UI] row 8 groups-len: 1
-2025-08-20 15:22:57,849 | INFO | root | [UI] row 9 __Term_HTML__ short: nan...
-2025-08-20 15:22:57,850 | INFO | root | [UI] row 9 groups-len: 1
-2025-08-20 15:22:57,913 | INFO | root | [UI] row 10 __Term_HTML__ short: nan...
-2025-08-20 15:22:57,914 | INFO | root | [UI] row 10 groups-len: 1
-2025-08-20 15:22:57,947 | INFO | root | [UI] row 11 __Term_HTML__ short: nan...
-2025-08-20 15:22:57,948 | INFO | root | [UI] row 11 groups-len: 1
-2025-08-20 15:22:58,003 | INFO | root | [UI] row 12 __Term_HTML__ short: nan...
-2025-08-20 15:22:58,004 | INFO | root | [UI] row 12 groups-len: 1
-2025-08-20 15:22:58,104 | INFO | root | [UI] row 13 __Term_HTML__ short: nan...
-2025-08-20 15:22:58,104 | INFO | root | [UI] row 13 groups-len: 1
-2025-08-20 15:22:58,172 | INFO | root | [UI] row 14 __Term_HTML__ short: nan...
-2025-08-20 15:22:58,172 | INFO | root | [UI] row 14 groups-len: 1
-2025-08-20 15:22:58,245 | INFO | root | [UI] row 15 __Term_HTML__ short: nan...
-2025-08-20 15:22:58,246 | INFO | root | [UI] row 15 groups-len: 1
-2025-08-20 15:22:58,332 | INFO | root | [UI] row 16 __Term_HTML__ short: nan...
-2025-08-20 15:22:58,333 | INFO | root | [UI] row 16 groups-len: 1
-2025-08-20 15:22:58,419 | INFO | root | [UI] row 17 __Term_HTML__ short: nan...
-2025-08-20 15:22:58,420 | INFO | root | [UI] row 17 groups-len: 1
-2025-08-20 15:22:58,454 | INFO | root | [UI] row 18 __Term_HTML__ short: nan...
-2025-08-20 15:22:58,455 | INFO | root | [UI] row 18 groups-len: 1
+2025-08-21 07:55:40,844 | INFO | root | [UI] row 0 HTML? True / text='DOM or UU1' / imgs=0
+2025-08-21 07:55:40,852 | INFO | root | [UI] row 1 HTML? True / text='3+' / imgs=0
+2025-08-21 07:55:40,855 | INFO | root | [UI] row 2 HTML? True / text='-' / imgs=1
+2025-08-21 07:55:41,101 | INFO | root | [UI] row 3 HTML? True / text='-' / imgs=1
+2025-08-21 07:55:41,131 | INFO | root | [UI] row 4 HTML? True / text='MADE IN THAILAND' / imgs=0
+2025-08-21 07:55:41,135 | INFO | root | [UI] row 5 HTML? True / text='Manufactured, imported or distributed by:
+Mattel Europa B.V....' / imgs=0
+2025-08-21 07:55:41,138 | INFO | root | [UI] row 6 HTML? True / text='CONFORMS TO THE SAFETY REQUIREMENTS OF ASTM F963.' / imgs=0
+2025-08-21 07:55:41,141 | INFO | root | [UI] row 7 HTML? True / text='-' / imgs=1
+2025-08-21 07:55:41,289 | INFO | root | [UI] row 8 HTML? True / text='-' / imgs=1
+2025-08-21 07:55:41,308 | INFO | root | [UI] row 9 HTML? True / text='-' / imgs=1
+2025-08-21 07:55:41,333 | INFO | root | [UI] row 10 HTML? True / text='-' / imgs=1
+2025-08-21 07:55:41,472 | INFO | root | [UI] row 11 HTML? True / text='-' / imgs=1
+2025-08-21 07:55:41,492 | INFO | root | [UI] row 12 HTML? True / text='-' / imgs=1
+2025-08-21 07:55:41,525 | INFO | root | [UI] row 13 HTML? True / text='-' / imgs=1
+2025-08-21 07:55:41,712 | INFO | root | [UI] row 14 HTML? True / text='-' / imgs=1
+2025-08-21 07:55:41,760 | INFO | root | [UI] row 15 HTML? True / text='-' / imgs=1
+2025-08-21 07:55:41,815 | INFO | root | [UI] row 16 HTML? True / text='-' / imgs=1
+2025-08-21 07:55:41,855 | INFO | root | [UI] row 17 HTML? True / text='-' / imgs=1
+2025-08-21 07:55:41,916 | INFO | root | [UI] row 18 HTML? True / text='-' / imgs=1
