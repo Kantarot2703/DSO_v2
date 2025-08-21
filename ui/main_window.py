@@ -76,6 +76,7 @@ class DSOApp(QtWidgets.QWidget):
         self.result_table.setMouseTracking(True)
         self.result_table.viewport().installEventFilter(self)
         self.result_table.itemSelectionChanged.connect(self.update_row_highlight)
+        self.result_table.horizontalHeader().sectionResized.connect(self._on_column_resized)
 
         # Action Buttons
         action_layout = QtWidgets.QHBoxLayout()
@@ -245,20 +246,19 @@ class DSOApp(QtWidgets.QWidget):
             self.update_row_highlight()
 
         # ตั้งความกว้างหลัก
-        equal_width = 280
+        equal_width = 240
         if "Requirement" in df_ui.columns:
             self.result_table.setColumnWidth(df_ui.columns.get_loc("Requirement"), equal_width)
         if "Specification" in df_ui.columns:
             self.result_table.setColumnWidth(df_ui.columns.get_loc("Specification"), equal_width)
         if "Symbol/ Exact wording" in df_ui.columns:
-            self.result_table.setColumnWidth(df_ui.columns.get_loc("Symbol/ Exact wording"), 350)
+            self.result_table.setColumnWidth(df_ui.columns.get_loc("Symbol/ Exact wording"), 380)
         if "Package Panel" in df_ui.columns:
-            self.result_table.setColumnWidth(df_ui.columns.get_loc("Package Panel"), 240)
+            self.result_table.setColumnWidth(df_ui.columns.get_loc("Package Panel"), equal_width)
         if "Procedure" in df_ui.columns:
             self.result_table.setColumnWidth(df_ui.columns.get_loc("Procedure"), equal_width)
-
         if "Remark" in df_ui.columns:
-            self.result_table.setColumnWidth(df_ui.columns.get_loc("Remark"), 340)
+            self.result_table.setColumnWidth(df_ui.columns.get_loc("Remark"), 280)
 
         header = self.result_table.horizontalHeader()
         for i in range(df_ui.shape[1]):
@@ -278,7 +278,7 @@ class DSOApp(QtWidgets.QWidget):
                         self.result_table.setColumnWidth(df_ui.columns.get_loc(col), ref_width)
 
             if "Note" in df_ui.columns:
-                self.result_table.setColumnWidth(df_ui.columns.get_loc("Note"), 290)
+                self.result_table.setColumnWidth(df_ui.columns.get_loc("Note"), 250)
 
         self.result_table.resizeRowsToContents()
 
@@ -342,7 +342,6 @@ class DSOApp(QtWidgets.QWidget):
                 if header == "Symbol/ Exact wording":
                     req_text  = str(row_src.get("Requirement", "")).strip()
 
-                    # ----- เตรียมค่า text/html -----
                     def _clean_plain(s: str) -> str:
                         if s is None:
                             return ""
@@ -383,30 +382,37 @@ class DSOApp(QtWidgets.QWidget):
                         display_text = term_text
                         plain_for_measure = term_text
                     else:
-                        # **เงื่อนไขสำคัญของข้อ 1**:
-                        # ถ้าไม่มีข้อความ แต่ "มีรูป" → ไม่ใส่ "-" ปล่อยเป็นว่างจริง
                         display_text = "" if has_images else "-"
                         plain_for_measure = ""
 
-                    # ----- สร้าง UI ของเซลล์ -----
+                    # สร้าง UI ของเซลล์
                     container = QtWidgets.QWidget()
                     outer = QtWidgets.QVBoxLayout(container)
-                    outer.setContentsMargins(8, 4, 8, 4)     # ลด margin ข้างให้พอดี
-                    outer.setSpacing(6)
+                    outer.setContentsMargins(4, 2, 4, 2)
+                    outer.setSpacing(4)
                     outer.setAlignment(QtCore.Qt.AlignCenter)
 
-                    # วาง "ข้อความ" เฉพาะเมื่อมีข้อความจริงเท่านั้น
+                    # วางข้อความเฉพาะเมื่อมีข้อความจริงเท่านั้น
+                    term_label = None
                     if display_text.strip():
                         term_label = QtWidgets.QLabel()
                         term_label.setTextFormat(QtCore.Qt.RichText)
                         term_label.setTextInteractionFlags(Qt.TextBrowserInteraction)
                         term_label.setAlignment(QtCore.Qt.AlignHCenter | QtCore.Qt.AlignVCenter)
 
-                        # ตัดบรรทัดเฉพาะจำเป็น (กันขึ้นบรรทัดเกิน)
+                        # ตัดบรรทัดแบบยืดหยุ่น + คุมความกว้างตามคอลัมน์
                         col_width = self.result_table.columnWidth(col_idx)
                         fm = term_label.fontMetrics()
-                        need_wrap = fm.horizontalAdvance(plain_for_measure) > max(40, col_width - 24)
-                        term_label.setWordWrap(need_wrap)
+                        inner_w = max(40, col_width - 12)
+                        term_label.setMinimumWidth(inner_w)
+                        term_label.setMaximumWidth(inner_w)
+
+                        if plain_for_measure:
+                            need_wrap = fm.horizontalAdvance(plain_for_measure) > inner_w
+                            term_label.setWordWrap(need_wrap)
+                        else:
+                            term_label.setWordWrap(True)
+
                         term_label.setText(display_text)
 
                         # สีแดงกรณี Not Found (คงพฤติกรรมเดิม)
@@ -417,7 +423,7 @@ class DSOApp(QtWidgets.QWidget):
 
                         outer.addWidget(term_label, 0, QtCore.Qt.AlignHCenter | QtCore.Qt.AlignVCenter)
 
-                    # ----- ส่วนรูปภาพ -----
+                    # ส่วนรูปภาพ
                     if has_images:
                         all_paths = []
                         for g in groups:
@@ -429,19 +435,18 @@ class DSOApp(QtWidgets.QWidget):
                         if all_paths:
                             img_wrap = QtWidgets.QWidget()
                             img_vbox = QtWidgets.QVBoxLayout(img_wrap)
-                            padding_lr = 12
-                            img_vbox.setContentsMargins(padding_lr, 8, padding_lr, 8)
+                            padding_lr = 8
+                            img_vbox.setContentsMargins(padding_lr, 0, padding_lr, 0)  # กันภาพไม่ชิดขอบ
                             img_vbox.setSpacing(8)
                             img_vbox.setAlignment(QtCore.Qt.AlignHCenter | QtCore.Qt.AlignVCenter)
 
                             # ความกว้างรูปสูงสุด = ความกว้างคอลัมน์ - padding ซ้าย/ขวา
                             col_width = self.result_table.columnWidth(col_idx)
-                            max_img_w = max(80, col_width - (padding_lr * 2))
+                            max_img_w = max(40, col_width - 2 * padding_lr)
 
                             def _is_logo(path: str, req: str) -> bool:
                                 p_low = os.path.basename(path or "").lower()
                                 r_low = (req or "").lower()
-                                # คีย์เวิร์ดทั่วไปของโลโก้/มาร์ก
                                 keys = ("logo", "mark", "lion", "ce ", "ukca", "mc ")
                                 return any(k in p_low for k in keys) or any(k in r_low for k in keys)
 
@@ -461,16 +466,16 @@ class DSOApp(QtWidgets.QWidget):
                                 if not pm:
                                     lbl.setText(f"[!] Missing image: {p}")
                                     lbl.setStyleSheet("color:#b91c1c;")
-                                    img_vbox.addChildWidget(lbl, 0, QtCore.Qt.AlignHCenter | QtCore.Qt.AlignVCenter)
+                                    img_vbox.addWidget(lbl, 0, QtCore.Qt.AlignHCenter | QtCore.Qt.AlignVCenter)
                                     continue
 
-                                 # โลโก้ = คงเล็ก / non‑logo = ขยายเต็มคอลัมน์ (เผื่อ margin)
+                                # โลโก้ = เล็ก / non-logo = กว้าง (เผื่อ margin)
                                 if _is_logo(p, req_text):
-                                    target_w = min(140, max_img_w) 
+                                    target_w = min(140, max_img_w)
                                 else:
                                     target_w = min(int(max_img_w * 0.96), pm.width())
-                                
-                                # สเกลเฉพาะกรณีจำเป็น (ไม่ขยายเกินไฟล์จริง)
+
+                                # สเกลเฉพาะจำเป็น (ไม่ขยายเกินไฟล์จริง)
                                 if pm.width() > target_w:
                                     lbl.setPixmap(pm.scaledToWidth(target_w, QtCore.Qt.SmoothTransformation))
                                 else:
@@ -487,6 +492,7 @@ class DSOApp(QtWidgets.QWidget):
                                 outer.addWidget(img_wrap, 0, QtCore.Qt.AlignHCenter | QtCore.Qt.AlignVCenter)
 
                     container.setLayout(outer)
+                    self.result_table.takeItem(row_idx, col_idx)
                     self.result_table.setCellWidget(row_idx, col_idx, container)
 
                     # ปรับความสูงแถวให้พอดีเนื้อหา
@@ -495,7 +501,6 @@ class DSOApp(QtWidgets.QWidget):
                         self.result_table.setRowHeight(row_idx, 28)
 
                     continue
-
 
                 # Remark คอลัมน์เดียว แต่คลิกได้ถ้ามีลิงก์จาก Excel; ถ้าไม่มีให้ linkify/หรือ "-" ; จัดกึ่งกลาง 
                 if header == "Remark":
@@ -559,6 +564,36 @@ class DSOApp(QtWidgets.QWidget):
                 self.result_table.setItem(row_idx, col_idx, item)
 
             self.result_table.resizeRowsToContents()
+
+    def _on_column_resized(self, logicalIndex: int, oldSize: int, newSize: int):
+        header_item = self.result_table.horizontalHeaderItem(logicalIndex)
+        if not header_item:
+            return
+        if header_item.text().strip().lower() != "symbol/ exact wording":
+            return
+
+        col_idx = logicalIndex
+        col_w = self.result_table.columnWidth(col_idx)
+        inner_w = max(40, col_w - 12)
+
+        for row in range(self.result_table.rowCount()):
+            cell = self.result_table.cellWidget(row, col_idx)
+            if not cell:
+                continue
+            labels = cell.findChildren(QtWidgets.QLabel)
+            for lbl in labels:
+                # ข้าม QLabel ที่เป็นภาพ (ไม่มี RichText)
+                txt_html = lbl.text() if hasattr(lbl, "text") else ""
+                if not isinstance(txt_html, str) or "<img" in txt_html.lower():
+                    continue
+                txt_plain = re.sub(r"<[^>]+>", "", txt_html)
+                fm = lbl.fontMetrics()
+                lbl.setMinimumWidth(inner_w)
+                lbl.setMaximumWidth(inner_w)
+                need_wrap = fm.horizontalAdvance(txt_plain) > inner_w if txt_plain else True
+                lbl.setWordWrap(need_wrap)
+
+        self.result_table.resizeRowsToContents()
 
     def export_results(self):
         if self.result_df is None or self.result_df.empty:

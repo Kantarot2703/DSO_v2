@@ -175,7 +175,6 @@ def extract_underlines_from_excel(excel_path, sheet_name, header_row_index, df):
         wb = load_workbook(excel_path, data_only=False)
         ws = wb[sheet_name]
 
-        # header_row_index คือแถวหัวตาราง (0-based บน df)
         # แถวข้อมูลแรกในชีตโดยประมาณ:
         approx_start_row = header_row_index + 2  # เดิม
         term_col_idx = list(df.columns).index(term_col_name) + 1
@@ -186,7 +185,7 @@ def extract_underlines_from_excel(excel_path, sheet_name, header_row_index, df):
         def _cell_rich_to_html(cell, plain_text: str) -> str:
             txt_plain = _html.escape(plain_text or "")
 
-            # 1) พยายามอ่าน rich runs
+            # พยายามอ่าน rich runs
             try:
                 val = cell.value
                 runs = []
@@ -214,7 +213,7 @@ def extract_underlines_from_excel(excel_path, sheet_name, header_row_index, df):
             except Exception as e:
                 logging.debug(f"[underline] rich runs parse failed: {e}")
 
-            # 2) Fallback: ใช้ font ของทั้ง cell
+            # Fallback ใช้ font ของทั้ง cell
             try:
                 f = getattr(cell, "font", None)
                 if f:
@@ -229,8 +228,7 @@ def extract_underlines_from_excel(excel_path, sheet_name, header_row_index, df):
         def _norm(s):
             return ("" if s is None else str(s)).replace("\r", "").strip()
 
-        # ---- คำนวณออฟเซ็ตจริงด้วยการจับคู่ข้อความในคอลัมน์ Term ----
-        # เอาแถวแรกๆ 3–5 แถวจาก df ไปไล่หาในชีต เพื่อหา delta ระหว่าง approx_start_row กับแถวจริง
+        # คำนวณออฟเซ็ตจริงด้วยการจับคู่ข้อความในคอลัมน์ Term
         probe_window = 6
         delta_candidates = []
         for i in range(min(len(df), probe_window)):
@@ -253,14 +251,13 @@ def extract_underlines_from_excel(excel_path, sheet_name, header_row_index, df):
 
         real_start_row = approx_start_row
         if delta_candidates:
-            # ใช้ค่ากึ่งกลางเพื่อกัน outlier
             delta_candidates.sort()
             real_delta = delta_candidates[len(delta_candidates)//2]
             real_start_row = approx_start_row + real_delta
 
         logging.info(f"[underline] approx_start_row={approx_start_row}, real_start_row={real_start_row}")
 
-        # ---- สร้าง HTML ตามแถวจริง ----
+        # สร้าง HTML ตามแถวจริง 
         html_list = []
         for i in range(len(df)):
             ws_row = real_start_row + i
@@ -322,7 +319,6 @@ def load_checklist(excel_path, pdf_filename=None):
                         # ให้แต้มถ้าตรงคีย์เวิร์ดหัวตาราง
                         if any(re.search(p, s_norm) for p in HEADER_HINTS):
                             score += 5
-                        # ไม่ใช่ประโยคยาว/มีสัญลักษณ์ = เยอะ
                         if len(s) <= 24:
                             score += 1
                         if "=" in s or "“" in s or "”" in s:
@@ -455,18 +451,16 @@ def load_checklist(excel_path, pdf_filename=None):
                 try:
                     wb = load_workbook(excel_path, data_only=True)
                     ws = wb[sheet_name]
-                    # หา index ของคอลัมน์ Remark จาก df.columns
+
                     if "Remark" in df.columns:
-                        # ตำแหน่งคอลัมน์ในชีต: +1 เพราะ openpyxl เริ่มที่ 1
                         remark_col_idx = list(df.columns).index("Remark") + 1
-                        start_row = header_row_index + 2  # แถวแรกของข้อมูลจริงในชีต
+                        start_row = header_row_index + 2 
 
                         remark_links = []
                         for i in range(len(df)):
                             cell = ws.cell(row=start_row + i, column=remark_col_idx)
                             url = ""
                             if cell and cell.hyperlink:
-                                # openpyxl ให้ .hyperlink.target เป็น URL จริง
                                 url = cell.hyperlink.target or ""
                             remark_links.append(url)
                         df["Remark Link"] = remark_links
@@ -476,8 +470,7 @@ def load_checklist(excel_path, pdf_filename=None):
                     logging.debug(f"Remark hyperlink extraction skipped: {_e}")
                     df["Remark Link"] = ""
 
-                # --- RESOLVE absolute paths for Image_Groups and add _HasImage BEFORE filtering ---
-
+                # RESOLVE absolute paths for Image_Groups and add _HasImage BEFORE filtering
                 excel_dir = os.path.dirname(excel_path)
 
                 def _resolve_group_paths(groups):
@@ -507,7 +500,7 @@ def load_checklist(excel_path, pdf_filename=None):
 
                 df["_HasImage"] = df["Image_Groups_Resolved"].apply(_has_any_image)
 
-                # (ถ้ามีคอลัมน์ Image Path แบบเดี่ยว ก็ resolve ให้ด้วย)
+                # ถ้ามีคอลัมน์ Image Path แบบเดี่ยว ก็ resolve ให้ด้วย
                 if "Image Path" in df.columns:
                     df["Image Path"] = df["Image Path"].fillna("").astype(str)
                 else:
@@ -546,8 +539,12 @@ def load_checklist(excel_path, pdf_filename=None):
                 remark_link_series = df.get("Remark Link", pd.Series([""] * len(df), index=df.index))
                 remark_link_empty = remark_link_series.astype(str).str.strip().isin(["", "-", "nan", ""])
 
+                # Force keep row
+                force_keep_mask = df.get("Requirement", pd.Series([""]*len(df))).astype(str).str.strip().str.lower() \
+                                    .str.contains(r"instruction\s+of\s+play\s+function\s+feature", regex=True)
+                
                 # แถวที่ควรเก็บ = อย่างน้อยต้องมี Term หรือ Spec หรือ Remark ไม่ว่าง
-                keep_mask = ~(term_empty & spec_empty & remark_empty & remark_link_empty) | df["_HasImage"]
+                keep_mask = ~(term_empty & spec_empty & remark_empty & remark_link_empty) | df["_HasImage"] | force_keep_mask
                 df = df[keep_mask].reset_index(drop=True)
 
                 # กันช่องว่างล้วน (ยกเว้น Requirement/Language) เป็น NaN ล้วน
@@ -877,9 +874,20 @@ def start_check(df_checklist, extracted_text_list):
     final_results = []
     for (requirement, spec, verification), items in grouped.items():
         for item in items:
-            term_display = item.get("Term", "")
-            if pd.isna(term_display) or str(term_display).strip().lower() in ["", "nan", "-", "none"]:
+            raw_term = item.get("Term", "")
+            has_imgs = bool(item.get("Image_Groups_Resolved") or [])
+
+            def _is_blank(s) -> bool:
+                s = "" if s is None else str(s).strip()
+                return s.lower() in ("", "nan", "none", "-")
+
+            if _is_blank(raw_term) and has_imgs:
+                term_display = ""
+            elif _is_blank(raw_term):
                 term_display = "-"
+            else:
+                term_display = str(raw_term)
+
             final_results.append({
                 "Requirement": requirement,
                 "Symbol/ Exact wording": term_display,
@@ -887,7 +895,7 @@ def start_check(df_checklist, extracted_text_list):
                 "Package Panel": item.get("Package Panel", "-"),
                 "Procedure": item.get("Procedure", "-"),
                 "Remark": item.get("Remark", "-"),
-                "Remark URL": item.get("Remark URL", "-"), 
+                "Remark URL": item.get("Remark URL", "-"),
                 "Found": item["Found"],
                 "Match": item["Match"],
                 "Pages": item["Pages"],
