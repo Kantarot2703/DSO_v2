@@ -329,8 +329,14 @@ def extract_underlines_from_excel(excel_path, sheet_name, header_row_index, df):
         for i in range(len(df)):
             ws_row = real_start_row + i
             cell = ws.cell(row=ws_row, column=term_col_idx)
-            text_val = _norm(df.iloc[i].get(term_col_name, ""))
-            html_list.append(_cell_rich_to_html(cell, text_val))
+
+            # ใช้ข้อความ "ดิบ" จาก df ไม่ normalize ทิ้งบรรทัดใหม่
+            text_raw = df.iloc[i].get(term_col_name, "")
+            if text_raw is None:
+                text_raw = ""
+            text_raw = str(text_raw)
+
+            html_list.append(_cell_rich_to_html(cell, text_raw))
 
         df["__Term_HTML__"] = [(h or "").replace("\r", "").replace("\n", "<br>") for h in html_list]
         return df
@@ -728,6 +734,26 @@ def start_check(df_checklist, extracted_text_list):
         term_cell_clean = "-" if term_cell_clean.lower() in ["", "n/a", "none", "unspecified", "nan"] else term_cell_clean
         term_lines = [term_cell_clean] if term_cell_clean != "-" else []
 
+        # HARD SKIP: ถ้าแถวถูกระบุ Manual ใน Excel ให้ข้ามการตรวจทั้งหมด
+        raw_verif = (str(row.get("Verification", "")) or "").strip().lower()
+        if raw_verif == "manual":
+            grouped[(requirement, spec, "Manual")].append({
+                "Term": term_cell_raw,
+                "Found": "-",
+                "Match": "-",
+                "Pages": "-",
+                "Font Size": "-",
+                "Note": "-",
+                "Verification": "Manual",
+                "Remark": remark_text,
+                "Remark URL": remark_link,
+                "Package Panel": package_panel,
+                "Procedure": procedure,
+                "__Term_HTML__": row.get("__Term_HTML__", ""),
+                "Image_Groups_Resolved": row.get("Image_Groups_Resolved", row.get("Image_Groups", [])),
+            })
+            continue
+
         # ตรวจ Manual
         is_manual = any(kw in req_norm for kw in manual_keywords)
 
@@ -757,7 +783,7 @@ def start_check(df_checklist, extracted_text_list):
                     continue 
                 continue
 
-        # --- MANUAL SECTION ---
+        # MANUAL SECTION 
         if is_manual:
             remark_str = str(row.get("Remark", "")).strip().lower()
             is_term_empty   = (len(term_lines) == 0)

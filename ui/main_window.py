@@ -444,11 +444,17 @@ class DSOApp(QtWidgets.QWidget):
                     term_label = None
                     if display_text.strip():
                         term_label = QtWidgets.QLabel()
-                        term_label.setTextFormat(QtCore.Qt.RichText)
+                        is_html_mode = bool(html_val)
+                        term_label.setTextFormat(QtCore.Qt.RichText if is_html_mode else QtCore.Qt.PlainText)
                         term_label.setTextInteractionFlags(Qt.TextBrowserInteraction)
                         term_label.setAlignment(QtCore.Qt.AlignHCenter | QtCore.Qt.AlignVCenter)
 
-                        # ตัดบรรทัดแบบยืดหยุ่น + คุมความกว้างตามคอลัมน์
+                        if is_html_mode:
+                            safe_html = re.sub(r"\r\n|\r|\n", "<br/>", display_text)
+                            term_label.setText(safe_html)
+                        else:
+                            term_label.setText(display_text)
+
                         col_width = self.result_table.columnWidth(col_idx)
                         fm = term_label.fontMetrics()
                         inner_w = max(40, col_width - 12)
@@ -460,8 +466,6 @@ class DSOApp(QtWidgets.QWidget):
                             term_label.setWordWrap(need_wrap)
                         else:
                             term_label.setWordWrap(True)
-
-                        term_label.setText(display_text)
 
                         # สีแดงกรณี Not Found (คงพฤติกรรมเดิม)
                         if str(row_ui.get("Found", "")).startswith("❌"):
@@ -511,27 +515,22 @@ class DSOApp(QtWidgets.QWidget):
                                 lbl = QtWidgets.QLabel()
                                 lbl.setAlignment(QtCore.Qt.AlignHCenter | QtCore.Qt.AlignVCenter)
 
+                                # เก็บเมตาไว้ใช้ตอนรีสเกลเมื่อคอลัมน์ถูกปรับ
+                                lbl.setProperty("img_path", p)
+                                is_logo = _is_logo(p, req_text)
+                                lbl.setProperty("is_logo", _is_logo(p, req_text))
+
                                 if not pm:
                                     lbl.setText(f"[!] Missing image: {p}")
                                     lbl.setStyleSheet("color:#b91c1c;")
                                     img_vbox.addWidget(lbl, 0, QtCore.Qt.AlignHCenter | QtCore.Qt.AlignVCenter)
                                     continue
 
-                                # โลโก้ = เล็ก / non-logo = กว้าง (เผื่อ margin)
-                                if _is_logo(p, req_text):
-                                    target_w = min(140, max_img_w)
-                                else:
-                                    target_w = min(int(max_img_w * 0.96), pm.width())
-
-                                # สเกลเฉพาะจำเป็น (ไม่ขยายเกินไฟล์จริง)
-                                if pm.width() > target_w:
-                                    lbl.setPixmap(pm.scaledToWidth(target_w, QtCore.Qt.SmoothTransformation))
-                                else:
-                                    lbl.setPixmap(pm)
+                                target_w = min(140, max_img_w) if is_logo else int(max_img_w * 0.98)
+                                lbl.setPixmap(pm.scaledToWidth(max(1, target_w), QtCore.Qt.SmoothTransformation))
 
                                 img_vbox.addWidget(lbl, 0, QtCore.Qt.AlignHCenter | QtCore.Qt.AlignVCenter)
 
-                            # ถ้า "ไม่มีข้อความ" → ใส่ stretch ก่อน/หลังภาพให้ลอยกึ่งกลางแนวตั้งจริง
                             if not display_text.strip():
                                 outer.addStretch(1)
                                 outer.addWidget(img_wrap, 0, QtCore.Qt.AlignHCenter | QtCore.Qt.AlignVCenter)
@@ -628,9 +627,10 @@ class DSOApp(QtWidgets.QWidget):
             cell = self.result_table.cellWidget(row, col_idx)
             if not cell:
                 continue
+
             labels = cell.findChildren(QtWidgets.QLabel)
+
             for lbl in labels:
-                # ข้าม QLabel ที่เป็นภาพ (ไม่มี RichText)
                 txt_html = lbl.text() if hasattr(lbl, "text") else ""
                 if not isinstance(txt_html, str) or "<img" in txt_html.lower():
                     continue
@@ -641,7 +641,23 @@ class DSOApp(QtWidgets.QWidget):
                 need_wrap = fm.horizontalAdvance(txt_plain) > inner_w if txt_plain else True
                 lbl.setWordWrap(need_wrap)
 
-        self.result_table.resizeRowsToContents()
+                # รีสเกลรูปในคอลัมน์นี้ให้พอดีกับความกว้างใหม่
+                for img_lbl in labels:
+                    img_path = img_lbl.property("img_path") 
+                    if not img_path:
+                        continue
+
+                    pm_orig = getattr(self, "_image_cache", {}).get(img_path)
+                    if not isinstance(pm_orig, QtGui.QPixmap) or pm_orig.isNull():
+                        continue
+
+                    padding_lr = 8
+                    max_img_w = max(40, col_w - 2 * padding_lr)
+                    is_logo   = bool(img_lbl.property("is_logo"))
+
+                    target_w  = min(140, max_img_w) if is_logo else int(max_img_w * 0.98)
+
+                    img_lbl.setPixmap(pm_orig.scaledToWidth(max(1, target_w), QtCore.Qt.SmoothTransformation))
 
     def export_results(self):
         if self.result_df is None or self.result_df.empty:
