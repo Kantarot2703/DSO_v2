@@ -1,50 +1,94 @@
-2025-08-22 10:45:08,630 | INFO | root | 📂 PDF filename: JCP34_JCP35_LA-CONVENTION_25HW_DOM_A5_Approved.pdf
-2025-08-22 10:45:08,631 | INFO | root | 🧠 Part codes detected: ['DOM']
-2025-08-22 10:45:08,631 | INFO | root | 📄 Sheet names: ['DOM', '4LB']
-2025-08-22 10:45:08,631 | INFO | root | ✅ Found matching sheet: DOM
-2025-08-22 10:45:08,634 | INFO | root | 🧾 Header chosen at row 2 | columns: ['Check list', 'Requirement', 'Symbol/  Exact wording', 'Specification', 'Package Panel', 'Procedure']...
-2025-08-22 10:45:08,634 | INFO | root | 🧾 Columns found in sheet: ['Check list', 'Requirement', 'Symbol/  Exact wording', 'Specification', 'Package Panel', 'Procedure', 'Remark', 'Image Match', 'Image Path']
-2025-08-22 10:45:08,635 | INFO | root | 🛟 Fallback columns → Term: Symbol/  Exact wording, Language: None, Spec: Requirement
-2025-08-22 10:45:08,635 | INFO | root | 🔎 ใช้คอลัมน์ Term: Symbol/  Exact wording, Language: None, Spec: Requirement
-2025-08-22 10:45:09,076 | INFO | root | [underline] approx_start_row=3, real_start_row=4
-2025-08-22 10:45:12,330 | INFO | checklist_loader | 📄 Artwork-like pages considered: 2 (real pages: [1, 2])
-2025-08-22 10:45:12,332 | INFO | checklist_loader | ✅ [FOUND] Req: 'Language code' | Term: 'DOM or UU1' | Pages: All pages | Match: ✔ | Font: - | Notes: -
-2025-08-22 10:45:12,333 | WARNING | checklist_loader | ❌ [NOT FOUND] Req: 'Age grade 3+
+2025-08-22 14:34:32,829 | INFO | root | 📂 PDF filename: 30782_MB2025_BASIC C_MIX 11_NEW,CARRY F_4LB_A1_review.pdf
+2025-08-22 14:34:32,830 | INFO | root | 🧠 Part codes detected: ['4LB']
+2025-08-22 14:34:32,830 | INFO | root | 📄 Sheet names: ['DOM', '4LB']
+2025-08-22 14:34:32,830 | INFO | root | ✅ Found matching sheet: 4LB
+2025-08-22 14:34:32,833 | INFO | root | 🧾 Header chosen at row 2 | columns: ['Check list', 'Requirement', 'Symbol/  Exact wording', 'Specification', 'Package Panel', 'Procedure']...
+2025-08-22 14:34:32,833 | INFO | root | 🧾 Columns found in sheet: ['Check list', 'Requirement', 'Symbol/  Exact wording', 'Specification', 'Package Panel', 'Procedure', 'Remark', 'Image Match', 'Image Path']
+2025-08-22 14:34:32,834 | INFO | root | 🛟 Fallback columns → Term: Symbol/  Exact wording, Language: None, Spec: Requirement
+2025-08-22 14:34:32,834 | INFO | root | 🔎 ใช้คอลัมน์ Term: Symbol/  Exact wording, Language: None, Spec: Requirement
+2025-08-22 14:34:37,033 | INFO | root | [underline] approx_start_row=3, real_start_row=4
+2025-08-22 14:34:38,683 | INFO | checklist_loader | 📄 Artwork-like pages considered: 17 (real pages: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 14, 15, 16, 17, 18])
+2025-08-22 14:34:38,695 | INFO | checklist_loader | ✅ [FOUND] Req: 'Language code' | Term: '4LB' | Pages: All pages | Match: ✔ | Font: - | Notes: -
+2025-08-22 14:34:38,699 | WARNING | checklist_loader | ❌ [NOT FOUND] Req: 'Age grade 3+
 (All markets)' | Term tried: '3+'
-2025-08-22 10:45:12,333 | INFO | checklist_loader | ✅ [FOUND] Req: 'Country of origin
-(All markets)' | Term: 'MADE IN THAILAND' | Pages: All pages | Match: ✔ | Font: ✔ | Notes: -
-2025-08-22 10:45:12,334 | INFO | checklist_loader | ✅ [FOUND] Req: 'Address
+2025-08-22 14:34:38,699 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'Product’s common or generic name
+(Canada)' | Spec: '≥ 1.6 mm.' → Manual verification
+2025-08-22 14:34:38,706 | INFO | checklist_loader | ✅ [FOUND] Req: 'Country of origin
+(All markets)' | Term: 'MADE IN THAILAND
+HECHO EN TAILANDIA
+FABRIQUÉ EN THAÏLANDE' | Pages: All pages | Match: ✔ | Font: - | Notes: -
+2025-08-22 14:34:38,707 | INFO | checklist_loader | ✅ [FOUND] Req: 'Country of origin
+(Brazil)' | Term: 'FABRICADO NA TAILÂNDIA' | Pages: All pages | Match: ✔ | Font: - | Notes: -
+2025-08-22 14:34:38,708 | INFO | checklist_loader | ✅ [FOUND] Req: 'Canadian address
+(Canada)' | Term: 'Imported by/ Importé par: Mattel Canada Inc., Mississauga, Ontario L5R 3W2.' | Pages: All pages | Match: ✔ | Font: - | Notes: -
+2025-08-22 14:34:38,710 | INFO | checklist_loader | ✅ [FOUND] Req: 'Address
 (EU)' | Term: 'Manufactured, imported or distributed by:' | Pages: All pages | Match: ✔ | Font: - | Notes: -
-2025-08-22 10:45:12,334 | INFO | checklist_loader | ✅ [FOUND] Req: 'Address
+2025-08-22 14:34:38,711 | INFO | checklist_loader | ✅ [FOUND] Req: 'Address
 (EU)' | Term: 'Mattel Europa B.V., Gondel 1, 1186 MJ Amstelveen, Nederland.' | Pages: All pages | Match: ❌ | Font: - | Notes: Underline Missing
-2025-08-22 10:45:12,335 | INFO | checklist_loader | ✅ [FOUND] Req: 'ASTM requirement
-(USA)' | Term: 'CONFORMS TO THE SAFETY REQUIREMENTS OF ASTM F963.' | Pages: All pages | Match: ✔ | Font: ✔ | Notes: -
-2025-08-22 10:45:12,335 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'Space for Date code
+2025-08-22 14:34:38,716 | INFO | checklist_loader | ✅ [FOUND] Req: 'Brazil requirement
+(Brazil)' | Term: 'GUARDAR PARA EVENTUAIS CONSULTAS' | Pages: All pages | Match: ✔ | Font: - | Notes: -
+2025-08-22 14:34:38,722 | INFO | checklist_loader | ✅ [FOUND] Req: 'ASTM requirement
+(USA)' | Term: 'CONFORMS TO / CONFORME AUX NORMES DE SÉCURITÉ DE / CUMPLE CON LAS NORMAS DE SEGURIDAD DE ASTM F963.' | Pages: All pages | Match: ✔ | Font: - | Notes: -
+2025-08-22 14:34:38,728 | INFO | checklist_loader | ✅ [FOUND] Req: 'Canada requirement
+(Canada)' | Term: 'Any additional languages on the package must not be displayed with greater prominence than the French.' | Pages: All pages | Match: ✔ | Font: - | Notes: -
+2025-08-22 14:34:38,729 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'Space for Date code
 (All markets)' | Spec: 'Must not cover any text and illustration' → Manual verification
-2025-08-22 10:45:12,335 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'Lion mark
+2025-08-22 14:34:38,730 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'Lion mark
 (All markets)' | Spec: '≥ 5 mm.' → Manual verification
-2025-08-22 10:45:12,336 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'CE mark
+2025-08-22 14:34:38,730 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'CE mark
 (All markets)' | Spec: '≥ 5 mm.' → Manual verification
-2025-08-22 10:45:12,336 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'UKCA mark
+2025-08-22 14:34:38,731 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'UKCA mark
 (All markets)' | Spec: '≥ 5 mm.' → Manual verification
-2025-08-22 10:45:12,337 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'MC  mark
+2025-08-22 14:34:38,731 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'MC  mark
 (All markets)' | Spec: '≥ 5x5 mm.
 (Exclude numbers under MC )' → Manual verification
-2025-08-22 10:45:12,337 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'CIB: Consumer Information Block
+2025-08-22 14:34:38,732 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'CIB: Consumer Information Block
 (All markets)' | Spec: 'must be located near the legal copy' → Manual verification
-2025-08-22 10:45:12,338 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'International
- warning statement
-(All markets)' | Spec: 'SYMBOL ≥ 10 mm
-TEXT ≥ 1.5 mm' → Manual verification
-2025-08-22 10:45:12,339 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'International
- warning statement
-(All markets)' | Spec: 'SYMBOL ≥ 10 mm
-TEXT ≥ 1.5 mm' → Manual verification
-2025-08-22 10:45:12,339 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'UPC requirement
+2025-08-22 14:34:38,732 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'Argentina logo
+(Argentina)' | Spec: '≥ 12. 5 mm.' → Manual verification
+2025-08-22 14:34:38,732 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'Brazilian logo
+(Brazil)' | Spec: '≥ 20 mm.
+( largest panel is < 278.75 cm2)' → Manual verification
+2025-08-22 14:34:38,733 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'Sorting & Donation Label
+(France)' | Spec: 'Standard Dimensions: The Triman logo height must be ≥ 10 mm.
+Compact Dimensions: The Triman logo height must be ≥ 6 mm.' → Manual verification
+2025-08-22 14:34:38,733 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'International
+ warning statement: SPW
+(All markets)' | Spec: 'Packages area of the largest panel is < 278.75 cm² 
+
+Brazil requriement: The words "ATENÇÃO
+ must "be in uppercase and ≥ 2 mm.
+The cautionary statements following the signal word must be in all uppercase and ≥ 2 mm in height.
+
+Mercosur requirement : The signal words "ADVERTENCIA"  must be in uppercase and ≥ 2 mm.
+The cautionary statements following the signal word must be ≥ 1.5 mm and can be in uppercase or lowercase.' → Manual verification
+2025-08-22 14:34:38,734 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'International
+ warning statement: SPG
+(All markets)' | Spec: 'Packages area of the largest panel is < 278.75 cm² 
+
+Brazil & Canada requriement: The words "ATENÇÃO, ATTENTION"
+ must "be in uppercase and ≥ 2 mm.
+The cautionary statements following the signal word must be in all uppercase and ≥ 2 mm in height.
+
+Mercosur requirement : The signal words "ADVERTENCIA"  must be in uppercase and ≥ 2 mm.
+The cautionary statements following the signal word must be ≥ 1.5 mm and can be in uppercase or lowercase.' → Manual verification
+2025-08-22 14:34:38,735 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'UPC requirement
 (All markets)' | Spec: 'Size of UPC Barcode depend on area panel' → Manual verification
-2025-08-22 10:45:12,339 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'List of content : Text
-(All market)' | Spec: 'Internation requriement: A list of contents is required when the product is in a closed package where the actual contents are not
-visible.' → Manual verification
-2025-08-22 10:45:12,340 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'List of content : 
+2025-08-22 14:34:38,735 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'List of content : Text
+(All market)' | Spec: 'All markets
+- open package = no need list of content
+- close package = need list of content' → Manual verification
+2025-08-22 14:34:38,735 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'List of content : Text
+(Brazil)' | Spec: 'Brazil : The word “CONTEÚDO:” and the numerical portion (quantity) of the list of contents must meet the text height requirement per Table' → Manual verification
+2025-08-22 14:34:38,736 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'List of content : Text
+(Canada)' | Spec: 'Canada : The text ≥ 1.6 mm.
+The number must be in bold and must meet the height requirement per table as below.' → Manual verification
+2025-08-22 14:34:38,736 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'List of content : 
 pictorial
-(All markets)' | Spec: 'Internation requriement:  A pictorial (photo or graphic art) list of contents of the package contents may be used.' → Manual verification
+(All markets)' | Spec: 'Must have text above picture at least 4 languages (English, French, Brazilian Portuguese, Russian)
+
+Brazil : 
+The word “CONTEÚDO:” and the numerical portion (quantity) of the list of contents must meet the text height requirement per Table
+
+Canada : 
+Any additional languages on the package must not be displayed with greater prominence than the French. So the translation of French must equal Brazilian Portuguese.' → Manual verification

@@ -41,6 +41,18 @@ def _parse_threshold_to_mm(spec_text: str):
 def _fmt_mm(x: float) -> str:
     return f"{x:.1f} mm"
 
+def _extract_underlined_substrings(html_text: str) -> list:
+    """ดึงคำ/วลีที่อยู่ใน <u>...</u> แล้วคืนเป็นลิสต์ (ล้างแท็กอื่นออก)"""
+    if not isinstance(html_text, str) or not html_text.strip():
+        return []
+    parts = []
+    for m in re.finditer(r"<u>(.*?)</u>", html_text, flags=re.IGNORECASE | re.DOTALL):
+        frag = m.group(1) or ""
+        frag_plain = re.sub(r"<[^>]+>", "", frag).strip()
+        if frag_plain:
+            parts.append(frag_plain)
+    return parts
+
 def _dedup_notes(notes):
     """ลบข้อความซ้ำแบบไม่สนตัวพิมพ์ คงลำดับตัวแรกไว้"""
     out, seen = [], set()
@@ -223,11 +235,26 @@ def extract_underlines_from_excel(excel_path, sheet_name, header_row_index, df):
         term_col_idx = list(df.columns).index(term_col_name) + 1
 
         def _cell_rich_to_html(cell, plain_text: str) -> str:
+            import html as _html, logging
             txt_plain = _html.escape(plain_text or "")
 
-            # พยายามอ่าน rich runs
             try:
-                val = cell.value
+                val = getattr(cell, "value", None)
+
+                rt = getattr(val, "richText", None)
+                if rt:
+                    parts = []
+                    for r in rt:
+                        t = getattr(r, "text", "")
+                        f = getattr(r, "font", None)
+                        is_bold = bool(getattr(f, "bold", False)) if f else False
+                        is_ul   = bool(getattr(f, "underline", False)) if f else False
+                        h = _html.escape(str(t))
+                        if is_bold: h = f"<b>{h}</b>"
+                        if is_ul:   h = f"<u>{h}</u>"
+                        parts.append(h)
+                    return "".join(parts)
+
                 runs = []
                 if hasattr(val, "rich") and val.rich:
                     runs = val.rich
@@ -240,20 +267,18 @@ def extract_underlines_from_excel(excel_path, sheet_name, header_row_index, df):
                         t = getattr(r, "text", None)
                         if t is None:
                             t = str(r)
-                        t_html = _html.escape(str(t))
-
+                        h = _html.escape(str(t))
                         f = getattr(r, "font", None)
                         is_bold = bool(getattr(f, "bold", False)) if f else False
                         is_ul   = bool(getattr(f, "underline", False)) if f else False
-
-                        if is_bold: t_html = f"<b>{t_html}</b>"
-                        if is_ul:   t_html = f"<u>{t_html}</u>"
-                        parts.append(t_html)
+                        if is_bold: h = f"<b>{h}</b>"
+                        if is_ul:   h = f"<u>{h}</u>"
+                        parts.append(h)
                     return "".join(parts)
-            except Exception as e:
-                logging.debug(f"[underline] rich runs parse failed: {e}")
 
-            # Fallback ใช้ font ของทั้ง cell
+            except Exception as e:
+                logging.debug(f"[underline rich] parse failed: {e}")
+
             try:
                 f = getattr(cell, "font", None)
                 if f:
@@ -266,16 +291,18 @@ def extract_underlines_from_excel(excel_path, sheet_name, header_row_index, df):
             return txt_plain
 
         def _norm(s):
-            return ("" if s is None else str(s)).replace("\r", "").strip()
+            t = "" if s is None else str(s)
+            t = t.replace("\r", " ").replace("\n", " ")
+            t = " ".join(t.split())
+            return t.strip()
 
-        # คำนวณออฟเซ็ตจริงด้วยการจับคู่ข้อความในคอลัมน์ Term
         probe_window = 6
         delta_candidates = []
         for i in range(min(len(df), probe_window)):
             df_txt = _norm(df.iloc[i].get(term_col_name, ""))
             if not df_txt:
                 continue
-            # ไล่หาในชีตรอบๆ approx_start_row+i ภายใน ±5 แถว
+
             center = approx_start_row + i
             found_delta = None
             for d in range(-5, 6):
@@ -657,7 +684,7 @@ def start_check(df_checklist, extracted_text_list):
         if len(page_items) < 10:
             return False
         for item in page_items:
-            if isinstance(item, dict) and float(item.get("size", 0)) >= 1.6:
+            if isinstance(item, dict) and _pick_size_mm(item) >= 1.6:
                 return True
         return False
 
@@ -849,37 +876,62 @@ def start_check(df_checklist, extracted_text_list):
             spec_lower = spec.lower() if isinstance(spec, str) else ""
 
             if found_pages and matched_items and spec != "-":
-                # เงื่อนไขรูปแบบ (สรุปครั้งเดียว, ไม่วนซ้ำราย item)
                 if "bold" in spec_lower and not any(bolds):
                     match_result = "❌"
                     notes.append("Not Bold")
 
-                if "no underline" in spec_lower:
-                    if any(underlines):
-                        match_result = "❌"
-                        notes.append("Underline must be absent")
-                elif "underline" in spec_lower:
-                    if not any(underlines):
-                        match_result = "❌"
-                        notes.append("Underline Missing")
+            # Flexible Underline Check 
+            underline_direct = any(underlines)
+            underline_partial = False
+            html_src = row.get("__Term_HTML__", "") or row.get("Term_Underline_HTML", "")
+            need_u_parts = _extract_underlined_substrings(html_src)
 
-                if "all caps" in spec_lower and not any(t.isupper() for t in texts):
-                    match_result = "❌"
-                    notes.append("Not All Caps")
+            pages_set = set(found_pages)
 
-                # เกณฑ์ฟอนต์ → แปลงเป็น mm เสมอ (รองรับสเปกที่ใช้ pt)
-                thr_mm = _parse_threshold_to_mm(spec_lower)
-                if thr_mm is not None:
-                    if max_size_mm < thr_mm:
-                        match_result  = "❌"
-                        font_size_str = "❌"
-                        notes.append(f"font {_fmt_mm(max_size_mm)}")  # แจ้งค่าจริง
-                    else:
-                        font_size_str = "✔"
-                else:
-                    font_size_str = "✔" if match_result == "✔" else "-"
+            if need_u_parts:
+                need_u_norm = [normalize_text(x) for x in need_u_parts if str(x).strip()]
+                for txt_norm, pg, item in all_texts:
+                    if pg in pages_set and item and item.get("underline"):
+                        if any(frag and (frag in txt_norm) for frag in need_u_norm):
+                            underline_partial = True
+                            break
             else:
-                font_size_str = "-"
+                term_words = [w for w in term_norm.split() if len(w) > 1]
+                for txt_norm, pg, item in all_texts:
+                    if pg in pages_set and item and item.get("underline"):
+                        if any(w in txt_norm for w in term_words):
+                            underline_partial = True
+                            break
+
+            underline_present = underline_direct or underline_partial
+
+            # ตัดสินตามสเปก
+            if "no underline" in spec_lower:
+                if underline_present:
+                    match_result = "❌"
+                    notes.append("Underline must be absent")
+            elif "underline" in spec_lower:
+                if not underline_present:
+                    match_result = "❌"
+                    notes.append("Underline Missing")
+
+            if "all caps" in spec_lower and not any(t.isupper() for t in texts):
+                match_result = "❌"
+                notes.append("Not All Caps")
+
+            # เกณฑ์ฟอนต์ → แปลงเป็น mm เสมอ
+            thr_mm = _parse_threshold_to_mm(spec_lower)
+            if thr_mm is not None:
+                if max_size_mm < thr_mm:
+                    match_result  = "❌"
+                    font_size_str = "❌"
+                    notes.append(f"font {_fmt_mm(max_size_mm)}") 
+                else:
+                    font_size_str = "✔"
+            else:
+                font_size_str = "✔" if match_result == "✔" else "-"
+        else:
+            font_size_str = "-"
 
             # หน้าที่พบ
             pages = sorted(set(found_pages))
@@ -894,7 +946,7 @@ def start_check(df_checklist, extracted_text_list):
             else:
                 logger.warning("❌ [NOT FOUND] Req: '%s' | Term tried: '%s'", requirement, term)
 
-            # รวม Note แบบ dedupe คงลำดับเดิม
+            # รวมโน้ตไม่ให้ซ้ำ
             note_list = _dedup_notes(notes)
             note_str  = ", ".join(note_list) if note_list else "-"
 
@@ -913,7 +965,6 @@ def start_check(df_checklist, extracted_text_list):
                 "__Term_HTML__": row.get("__Term_HTML__", ""),
                 "Image_Groups_Resolved": row.get("Image_Groups_Resolved", row.get("Image_Groups", [])),         
             })
-
 
     final_results = []
     for (requirement, spec, verification), items in grouped.items():
