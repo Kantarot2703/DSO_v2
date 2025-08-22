@@ -118,11 +118,15 @@ class DSOApp(QtWidgets.QWidget):
                 item = self.result_table.item(row, col)
                 if not item:
                     continue
+
                 is_manual = False
                 if verif_col != -1:
                     verif_item = self.result_table.item(row, verif_col)
-                    if verif_item and verif_item.text().lower() == "manual":
-                        is_manual = True
+                    if verif_item:
+                        tag = verif_item.data(QtCore.Qt.UserRole)
+                        is_manual = (tag == "manual")
+                        if (not is_manual) and isinstance(verif_item.text(), str) and verif_item.text().strip().lower() == "manual":
+                            is_manual = True
                 if is_manual:
                     if is_selected:
                         item.setBackground(QColor("#fff1b0"))  
@@ -338,6 +342,50 @@ class DSOApp(QtWidgets.QWidget):
 
             for col_idx, header in enumerate(df_ui.columns):
                 value = row_ui.get(header, "-")
+
+                # --- Verification → แสดง Verified/Reject + tooltip ---
+                if header == "Verification":
+                    found     = str(row_ui.get("Found", ""))
+                    match     = str(row_ui.get("Match", ""))
+                    font_size = str(row_ui.get("Font Size", ""))
+                    raw_verif = (row_ui.get("Verification", "") or "").strip().lower()
+                    is_manual = (raw_verif == "manual") 
+
+                    if is_manual:
+                        text = "Manual"
+                        ok = None
+                    else:
+                        ok_found = found.strip().startswith("✅")
+                        ok_match = match.strip().startswith("✔")
+                        fs = font_size.strip()
+                        ok_fsize = (fs in ("", "-")) or fs.startswith("✔")
+                        ok = ok_found and ok_match and ok_fsize
+                        text = "Verified" if ok else "Rejected"
+
+                    item = QtWidgets.QTableWidgetItem(text)
+                    item.setFlags(QtCore.Qt.ItemIsSelectable | QtCore.Qt.ItemIsEnabled)
+                    item.setTextAlignment(QtCore.Qt.AlignHCenter | QtCore.Qt.AlignVCenter)
+
+                    # ทำให้ "ตัวหนา" ทั้ง 3 สถานะ
+                    f = item.font()
+                    f.setBold(True)
+                    item.setFont(f)
+
+                    # Verified=เขียว, Reject=แดง, Manual=ค่าเริ่มต้น
+                    if not is_manual:
+                        item.setForeground(QColor("#15803d") if ok else QColor("red"))
+
+                    # Tooltip อธิบายเหตุผล
+                    tip = f"Found: {found or '-'}\nMatch: {match or '-'}\nFont Size: {font_size or '-'}"
+                    if is_manual:
+                        tip += "\n— Manual check"
+                    item.setToolTip(tip)
+
+                    # เก็บแฟล็ก manual ให้ตัวไฮไลต์ใช้
+                    item.setData(QtCore.Qt.UserRole, "manual" if is_manual else "auto")
+
+                    self.result_table.setItem(row_idx, col_idx, item)
+                    continue
 
                 if header == "Symbol/ Exact wording":
                     req_text  = str(row_src.get("Requirement", "")).strip()

@@ -1,4 +1,5 @@
 import os, io, re
+import html as _html
 import pandas as pd
 import logging
 import unicodedata
@@ -11,6 +12,48 @@ from collections import defaultdict
 
 # Allowed part codes from PDF filenames
 ALLOWED_PART_CODES = ['UU1_DOM', 'DOM', 'UU1', '2LB', '2XV', '4LB', '19L', '19A', '21A', 'DC1']
+
+def _pt_to_mm(pt: float) -> float:
+    return (pt or 0.0) * 25.4 / 72.0
+
+def _pick_size_mm(item: dict) -> float:
+    if not item:
+        return 0.0
+    if "size_mm" in item and item.get("size_mm") is not None:
+        try:
+            return float(item["size_mm"])
+        except Exception:
+            return 0.0
+    unit = str(item.get("size_unit") or "").lower()
+    val = float(item.get("size", 0) or 0)
+    return _pt_to_mm(val) if unit == "pt" else val
+
+def _parse_threshold_to_mm(spec_text: str):
+    if not isinstance(spec_text, str):
+        return None
+    s = spec_text.lower()
+    m = re.search(r"≥\s*(\d+(?:\.\d+)?)", s)
+    if not m:
+        return None
+    val = float(m.group(1))
+    return _pt_to_mm(val) if ("pt" in s or "point" in s) else val
+
+def _fmt_mm(x: float) -> str:
+    return f"{x:.1f} mm"
+
+def _dedup_notes(notes):
+    """ลบข้อความซ้ำแบบไม่สนตัวพิมพ์ คงลำดับตัวแรกไว้"""
+    out, seen = [], set()
+    for n in notes or []:
+        s = str(n).strip()
+        if not s or s == "-":
+            continue
+        k = s.lower()
+        if k in seen:
+            continue
+        seen.add(k)
+        out.append(s)
+    return out
 
 def normalize_headers(df):
     rename = {}
@@ -178,9 +221,6 @@ def extract_underlines_from_excel(excel_path, sheet_name, header_row_index, df):
         # แถวข้อมูลแรกในชีตโดยประมาณ:
         approx_start_row = header_row_index + 2  # เดิม
         term_col_idx = list(df.columns).index(term_col_name) + 1
-
-        import html as _html
-        import logging, re
 
         def _cell_rich_to_html(cell, plain_text: str) -> str:
             txt_plain = _html.escape(plain_text or "")
@@ -797,17 +837,19 @@ def start_check(df_checklist, extracted_text_list):
             match_result = "✔"
             notes = []
 
-            # กัน list ว่าง/แปลงชนิด
-            spec_lower = spec.lower() if isinstance(spec, str) else "-"
-            sizes = [float(i.get("size", 0) or 0) for i in matched_items]
-            max_size = max(sizes) if sizes else 0.0
-            bolds = [bool(i.get("bold", False)) for i in matched_items]
-            underlines = [bool(i.get("underline", False)) for i in matched_items]
-            texts = [i.get("text", "") for i in matched_items]
+            # ใช้ mm จริงเทียบสเปก และสรุปเหตุผลเพียงครั้งเดีย
+            sizes_mm     = [_pick_size_mm(i) for i in matched_items]
+            max_size_mm  = max(sizes_mm) if sizes_mm else 0.0
+
+            bolds       = [bool(i.get("bold", False)) for i in matched_items]
+            underlines  = [bool(i.get("underline", False)) for i in matched_items]
+            texts       = [i.get("text", "") for i in matched_items]
 
             font_size_str = "-"
+            spec_lower = spec.lower() if isinstance(spec, str) else ""
 
             if found_pages and matched_items and spec != "-":
+                # เงื่อนไขรูปแบบ (สรุปครั้งเดียว, ไม่วนซ้ำราย item)
                 if "bold" in spec_lower and not any(bolds):
                     match_result = "❌"
                     notes.append("Not Bold")
@@ -825,43 +867,44 @@ def start_check(df_checklist, extracted_text_list):
                     match_result = "❌"
                     notes.append("Not All Caps")
 
-                if "≥" in spec:
-                    try:
-                        m = re.search(r"≥\s*(\d+(?:\.\d+)?)", spec)
-                        if m:
-                            threshold = float(m.group(1))
-                            if max_size < threshold:
-                                match_result = "❌"
-                                notes.append(f"Font < {threshold} mm")
-                            # โชว์ค่าจริงที่ตรวจเจอ (max) กัน crash index 0
-                            font_size_str = "✔" if match_result == "✔" else f"{round(max_size, 2)} mm"
-                        else:
-                            font_size_str = "-"
-                    except Exception:
-                        font_size_str = "-"
+                # เกณฑ์ฟอนต์ → แปลงเป็น mm เสมอ (รองรับสเปกที่ใช้ pt)
+                thr_mm = _parse_threshold_to_mm(spec_lower)
+                if thr_mm is not None:
+                    if max_size_mm < thr_mm:
+                        match_result  = "❌"
+                        font_size_str = "❌"
+                        notes.append(f"font {_fmt_mm(max_size_mm)}")  # แจ้งค่าจริง
+                    else:
+                        font_size_str = "✔"
                 else:
                     font_size_str = "✔" if match_result == "✔" else "-"
             else:
                 font_size_str = "-"
 
+            # หน้าที่พบ
             pages = sorted(set(found_pages))
             all_pages = sorted(set(p for _, p, _ in all_texts))
             page_str = "All pages" if set(pages) == set(all_pages) else ", ".join(str(p) for p in pages)
 
+            # log
             if found_pages:
                 logger.info("✅ [FOUND] Req: '%s' | Term: '%s' | Pages: %s | Match: %s | Font: %s | Notes: %s",
                             requirement, term, (page_str or "-"),
                             match_result, font_size_str, (", ".join(notes) or "-"))
             else:
                 logger.warning("❌ [NOT FOUND] Req: '%s' | Term tried: '%s'", requirement, term)
-            
+
+            # รวม Note แบบ dedupe คงลำดับเดิม
+            note_list = _dedup_notes(notes)
+            note_str  = ", ".join(note_list) if note_list else "-"
+
             grouped[(requirement, spec, "Verified")].append({
                 "Term": term,
                 "Found": found_flag,
                 "Match": match_result if found_flag == "✅ Found" else "❌",
                 "Pages": page_str if found_flag == "✅ Found" else "-",
                 "Font Size": font_size_str if found_flag == "✅ Found" else "-",
-                "Note": ", ".join(notes) if notes else "-",
+                "Note": note_str,
                 "Verification": "Verified",
                 "Remark": remark_text,
                 "Remark URL": remark_link,
@@ -870,6 +913,7 @@ def start_check(df_checklist, extracted_text_list):
                 "__Term_HTML__": row.get("__Term_HTML__", ""),
                 "Image_Groups_Resolved": row.get("Image_Groups_Resolved", row.get("Image_Groups", [])),         
             })
+
 
     final_results = []
     for (requirement, spec, verification), items in grouped.items():

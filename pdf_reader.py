@@ -1,5 +1,10 @@
-import fitz  # PyMuPDF
+import fitz 
 import re
+
+
+def _pt_to_mm(pt: float) -> float:
+    # 1 pt = 1/72 inch, 1 inch = 25.4 mm
+    return (pt or 0.0) * 25.4 / 72.0
 
 def extract_text_by_page(pdf_path):
     doc = fitz.open(pdf_path)
@@ -19,13 +24,21 @@ def extract_text_by_page(pdf_path):
                     if not text:
                         continue
 
+                    size_pt  = float(span.get("size", 0) or 0)
+                    size_mm  = _pt_to_mm(size_pt)
+                    fontname = span.get("font", "") or ""
+                    flags    = int(span.get("flags", 0) or 0)
+
                     item = {
                         "text": text,
-                        "bold": span.get("flags", 0) & 2 != 0,
-                        "italic": span.get("flags", 0) & 1 != 0,
-                        "underline": (span.get("flags", 0) & 8) != 0 or ("underline" in span.get("font", "").lower()),
-                        "size": span.get("size", 0),
-                        "font": span.get("font", "")
+                        "bold": (flags & 2) != 0 or ("bold" in fontname.lower()),
+                        "italic": (flags & 1) != 0,
+                        "underline": ((flags & 8) != 0) or ("underline" in fontname.lower()),
+                        "size_pt": size_pt,     
+                        "size_mm": size_mm,     
+                        "size_unit": "pt",      
+                        "size": size_mm,
+                        "font": fontname,
                     }
                     page_items.append(item)
 
