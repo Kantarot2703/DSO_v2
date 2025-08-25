@@ -66,6 +66,22 @@ Y_SEL    = "#fff1b0"
 G_HOVER  = "#eeeeee"
 G_SEL    = "#dddddd"
 
+# Image sizing rules
+LOGO_MAX_WIDTH_PX = 170       
+IMG_SIDE_PADDING  = 8        
+LOGO_KEYS = (" logo", " mark", " lion", " ce ", " ukca", " mc ", "cib")
+FORCE_FULL_KEYS = ("warning", "statement", "spw", "international",
+                    "upc", "list of content", "address", "instruction")
+
+def _is_logo_name(path: str, req_text: str) -> bool:
+    s = (os.path.basename(path or "") + " " + (req_text or "")).lower()
+    s = " " + s.replace("_", " ") + " "
+    return any(k in s for k in LOGO_KEYS)
+
+def _must_fill_width(req_text: str) -> bool:
+    s = " " + (req_text or "").lower() + " "
+    return any(k in s for k in FORCE_FULL_KEYS)
+
 class DSOApp(QtWidgets.QWidget):
     def __init__(self):
         super().__init__()
@@ -650,20 +666,13 @@ class DSOApp(QtWidgets.QWidget):
                         if all_paths:
                             img_wrap = QtWidgets.QWidget()
                             img_vbox = QtWidgets.QVBoxLayout(img_wrap)
-                            padding_lr = 8
-                            img_vbox.setContentsMargins(padding_lr, 0, padding_lr, 0) 
+                            img_vbox.setContentsMargins(IMG_SIDE_PADDING, 0, IMG_SIDE_PADDING, 0)
                             img_vbox.setSpacing(8)
                             img_vbox.setAlignment(QtCore.Qt.AlignHCenter | QtCore.Qt.AlignVCenter)
 
                             # ความกว้างรูปสูงสุด = ความกว้างคอลัมน์ - padding ซ้าย/ขวา
                             col_width = self.result_table.columnWidth(col_idx)
-                            max_img_w = max(40, col_width - 2 * padding_lr)
-
-                            def _is_logo(path: str, req: str) -> bool:
-                                p_low = os.path.basename(path or "").lower()
-                                r_low = (req or "").lower()
-                                keys = ("logo", "mark", "lion", "ce ", "ukca", "mc ")
-                                return any(k in p_low for k in keys) or any(k in r_low for k in keys)
+                            max_img_w = max(40, col_width - 2 * IMG_SIDE_PADDING)
 
                             for p in all_paths:
                                 if not p:
@@ -677,13 +686,11 @@ class DSOApp(QtWidgets.QWidget):
 
                                 lbl = QtWidgets.QLabel()
                                 lbl.setAlignment(QtCore.Qt.AlignHCenter | QtCore.Qt.AlignVCenter)
-                                lbl.setFont(self.result_table.font())
-                                lbl.setStyleSheet(lbl.styleSheet() + " font-size: {}pt;".format(self.result_table.font().pointSize()))
 
                                 # เก็บเมตาไว้ใช้ตอนรีสเกลเมื่อคอลัมน์ถูกปรับ
                                 lbl.setProperty("img_path", p)
-                                is_logo = _is_logo(p, req_text)
-                                lbl.setProperty("is_logo", _is_logo(p, req_text))
+                                is_logo = _is_logo_name(p, req_text) and not _must_fill_width(req_text)
+                                lbl.setProperty("is_logo", is_logo)
 
                                 if not pm:
                                     lbl.setText(f"[!] Missing image: {p}")
@@ -691,10 +698,16 @@ class DSOApp(QtWidgets.QWidget):
                                     img_vbox.addWidget(lbl, 0, QtCore.Qt.AlignHCenter | QtCore.Qt.AlignVCenter)
                                     continue
 
-                                target_w = min(140, max_img_w) if is_logo else int(max_img_w * 0.98)
-                                lbl.setPixmap(pm.scaledToWidth(max(1, target_w), QtCore.Qt.SmoothTransformation))
+                                col_width = self.result_table.columnWidth(col_idx)
+                                max_img_w = max(40, col_width - 2 * IMG_SIDE_PADDING)
+
+                                # รูปทั่วไป: ขยายเกือบเต็มคอลัมน์, โลโก้/มาร์ก: จำกัดไม่ให้ใหญ่เกิน
+                                target_w = min(LOGO_MAX_WIDTH_PX, max_img_w) if is_logo else int(max_img_w * 0.98)
+                                scaled = pm.scaledToWidth(max(1, target_w), QtCore.Qt.SmoothTransformation)
+                                lbl.setPixmap(scaled)
 
                                 img_vbox.addWidget(lbl, 0, QtCore.Qt.AlignHCenter | QtCore.Qt.AlignVCenter)
+
 
                             if not display_text.strip():
                                 outer.addStretch(1)
@@ -706,6 +719,7 @@ class DSOApp(QtWidgets.QWidget):
                     container.setLayout(outer)
                     self.result_table.takeItem(row_idx, col_idx)
                     self.result_table.setCellWidget(row_idx, col_idx, container)
+                    self._attach_row_select(container, row_idx)
 
                     # ปรับความสูงแถวให้พอดีเนื้อหา
                     self.result_table.resizeRowToContents(row_idx)
@@ -827,12 +841,9 @@ class DSOApp(QtWidgets.QWidget):
                     if not isinstance(pm_orig, QtGui.QPixmap) or pm_orig.isNull():
                         continue
 
-                    padding_lr = 8
-                    max_img_w = max(40, col_w - 2 * padding_lr)
-                    is_logo   = bool(img_lbl.property("is_logo"))
-
-                    target_w  = min(140, max_img_w) if is_logo else int(max_img_w * 0.98)
-
+                    max_img_w = max(40, col_w - 2 * IMG_SIDE_PADDING)
+                    is_logo = bool(img_lbl.property("is_logo"))
+                    target_w = min(LOGO_MAX_WIDTH_PX, max_img_w) if is_logo else int(max_img_w * 0.98)
                     img_lbl.setPixmap(pm_orig.scaledToWidth(max(1, target_w), QtCore.Qt.SmoothTransformation))
 
     def export_results(self):
