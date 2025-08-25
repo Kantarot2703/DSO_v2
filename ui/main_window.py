@@ -198,6 +198,30 @@ class DSOApp(QtWidgets.QWidget):
             self._row_filters = []
         self._row_filters.append(f)
 
+    def _autosize_column_to_contents(self, column_name: str, min_w: int = 300, max_w: int = 700):
+        col_idx = self.get_column_index(column_name)
+        if col_idx < 0:
+            return
+        header = self.result_table.horizontalHeader()
+        need = min_w
+        for row in range(self.result_table.rowCount()):
+            w = self.result_table.cellWidget(row, col_idx)
+            if w:
+                for lbl in w.findChildren(QtWidgets.QLabel):
+                    txt = re.sub(r"<[^>]+>", "", lbl.text() or "")
+                    fm = lbl.fontMetrics()
+                    width = fm.boundingRect(txt).width() + 24
+                    need = max(need, width)
+
+            it = self.result_table.item(row, col_idx)
+            if it:
+                fm = it.fontMetrics()
+                width = fm.boundingRect(it.text() or "").width() + 24
+                need = max(need, width)
+        need = max(min_w, min(int(need), max_w))
+        header.setSectionResizeMode(col_idx, QtWidgets.QHeaderView.Fixed)
+        self.result_table.setColumnWidth(col_idx, need)
+
     def update_row_highlight(self):
         verif_col = self.get_column_index("Verification")
 
@@ -254,6 +278,16 @@ class DSOApp(QtWidgets.QWidget):
             if header_item and header_item.text().strip().lower() == column_name.strip().lower():
                 return col
         return -1
+    
+    def _table_font_pt(self) -> int:
+        pt = self.result_table.font().pointSize()
+        return max(8, pt if pt > 0 else 10)
+
+    def _wrap_html_with_table_font(self, html: str) -> str:
+        cleaned = re.sub(r'font-(?:size|family)\s*:\s*[^;"\']+;?', '', html or "", flags=re.I)
+        pt = self._table_font_pt()
+        family = self.result_table.font().family()
+        return f'<div style="font-family:{family}; font-size:{pt}pt;">{cleaned}</div>'
 
     def load_pdf(self):
         path, _ = QtWidgets.QFileDialog.getOpenFileName(self, "Select PDF Artwork", "", "PDF Files (*.pdf)")
@@ -438,6 +472,21 @@ class DSOApp(QtWidgets.QWidget):
             if "Note" in df_ui.columns:
                 self.result_table.setColumnWidth(df_ui.columns.get_loc("Note"), 250)
 
+        # หลังจบลูปเติมแถว
+        self.result_table.resizeRowsToContents()
+
+        # autosize คอลัมน์ยาว
+        sym_header = None
+        for name in ("Symbol/  Exact wording", "Symbol/ Exact wording", "Symbol/Exact wording"):
+            if name in df_ui.columns:
+                sym_header = name
+                break
+        if sym_header:
+            self._autosize_column_to_contents(sym_header, min_w=360, max_w=720)
+        if "Remark" in df_ui.columns:
+            self._autosize_column_to_contents("Remark", min_w=260, max_w=560)
+
+        # คำนวณความสูงใหม่หลังคอลัมน์กว้างขึ้น
         self.result_table.resizeRowsToContents()
 
         # helpers
@@ -598,13 +647,12 @@ class DSOApp(QtWidgets.QWidget):
 
                     html_plain = re.sub(r"<[^>]+>", "", html_val) if html_val else ""
 
-                    if term_text:
-                        if html_val and _sameish(html_plain, term_text):
-                            display_text = html_val
-                            plain_for_measure = html_plain
-                        else:
-                            display_text = term_text
-                            plain_for_measure = term_text
+                    if html_val:
+                        display_text = html_val
+                        plain_for_measure = html_plain or term_text
+                    elif term_text:
+                        display_text = term_text
+                        plain_for_measure = term_text
                     else:
                         display_text = "" if has_images else "-"
                         plain_for_measure = ""
@@ -620,37 +668,34 @@ class DSOApp(QtWidgets.QWidget):
                     term_label = None
                     if display_text.strip():
                         term_label = QtWidgets.QLabel()
-                        is_html_mode = bool(html_val)
-                        
-                        term_label.setFont(self.result_table.font())
-
-                        term_label.setTextFormat(QtCore.Qt.RichText if is_html_mode else QtCore.Qt.PlainText)
+                        term_label.setFont(self.result_table.font())  # ใช้ฟอนต์ของตารางเสมอ
                         term_label.setTextInteractionFlags(Qt.TextBrowserInteraction)
                         term_label.setAlignment(QtCore.Qt.AlignHCenter | QtCore.Qt.AlignVCenter)
 
-                        if is_html_mode:
-                            safe_html = re.sub(r"\r\n|\r|\n", "<br/>", display_text)
-                            term_label.setText(safe_html)
-                        else:
-                            term_label.setText(display_text)
+                        is_html_mode = bool(html_val)
+                        plain_for_measure = re.sub(r"<[^>]+>", "", display_text or "")
 
+                        if is_html_mode:
+                            safe_html = re.sub(r"\r\n|\r|\n", "<br/>", display_text or "")
+                            term_label.setTextFormat(QtCore.Qt.RichText)
+                            term_label.setText(self._wrap_html_with_table_font(safe_html))
+                        else:
+                            term_label.setTextFormat(QtCore.Qt.PlainText)
+                            term_label.setText(display_text or "")
+                            # บังคับขนาดให้เท่าตาราง (ไม่แตะความหนา/สี)
+                            term_label.setStyleSheet(term_label.styleSheet() + f" font-size:{self._table_font_pt()}pt;")
+
+                        # ความกว้างวัดการตัดบรรทัดคงเดิม
                         col_width = self.result_table.columnWidth(col_idx)
                         fm = term_label.fontMetrics()
                         inner_w = max(40, col_width - 12)
                         term_label.setMinimumWidth(inner_w)
                         term_label.setMaximumWidth(inner_w)
+                        term_label.setWordWrap(fm.horizontalAdvance(plain_for_measure) > inner_w if plain_for_measure else True)
 
-                        if plain_for_measure:
-                            need_wrap = fm.horizontalAdvance(plain_for_measure) > inner_w
-                            term_label.setWordWrap(need_wrap)
-                        else:
-                            term_label.setWordWrap(True)
-
-                        # สีแดงกรณี Not Found (คงพฤติกรรมเดิม)
+                        # คงสีแดงกรณี Not Found
                         if str(row_ui.get("Found", "")).startswith("❌"):
-                            term_label.setStyleSheet(f"color:{RED_HEX};")
-                        else:
-                            term_label.setStyleSheet("")
+                            term_label.setStyleSheet(term_label.styleSheet() + f" color:{RED_HEX};")
 
                         outer.addWidget(term_label, 0, QtCore.Qt.AlignHCenter | QtCore.Qt.AlignVCenter)
 
@@ -725,7 +770,6 @@ class DSOApp(QtWidgets.QWidget):
                     self.result_table.resizeRowToContents(row_idx)
                     if self.result_table.rowHeight(row_idx) < 28:
                         self.result_table.setRowHeight(row_idx, 28)
-
                     continue
 
                 # Remark คอลัมน์เดียว แต่คลิกได้ถ้ามีลิงก์จาก Excel; ถ้าไม่มีให้ linkify/หรือ "-" ; จัดกึ่งกลาง 
@@ -736,7 +780,7 @@ class DSOApp(QtWidgets.QWidget):
                     # ห่อด้วย container เพื่อควบคุม padding และติด event filter
                     rwrap = QtWidgets.QWidget()
                     rlay = QtWidgets.QVBoxLayout(rwrap)
-                    rlay.setContentsMargins(6, 2, 6, 2)  # padding
+                    rlay.setContentsMargins(6, 2, 6, 2) 
                     rlay.setSpacing(0)
 
                     lbl = QtWidgets.QLabel()
@@ -745,24 +789,22 @@ class DSOApp(QtWidgets.QWidget):
                     lbl.setTextInteractionFlags(QtCore.Qt.TextBrowserInteraction)
                     lbl.setAlignment(QtCore.Qt.AlignHCenter | QtCore.Qt.AlignVCenter)
                     lbl.setWordWrap(True)
-                    lbl.setFont(self.result_table.font())   # ฟอนต์เท่าตาราง
+                    lbl.setFont(self.result_table.font())
 
                     if url and txt and txt not in ["-", "nan", "None"]:
-                        lbl.setText(f'<a href="{url}">{QtCore.QCoreApplication.translate("", txt)}</a>')
-                        lbl.setToolTip(url)
+                        content_html = f'<a href="{url}">{QtCore.QCoreApplication.translate("", txt)}</a>'
                     elif url and not txt:
-                        lbl.setText(f'<a href="{url}">{url}</a>')
-                        lbl.setToolTip(url)
+                        content_html = f'<a href="{url}">{url}</a>'
                     else:
                         def linkify(s: str) -> str:
                             if not s:
                                 return "-"
                             return re.sub(r'(https?://[^\s]+)', r'<a href="\1">\1</a>', s)
-                        lbl.setText(linkify(txt) if txt else "-")
+                        content_html = linkify(txt) if txt else "-"
 
+                    lbl.setText(self._wrap_html_with_table_font(content_html))
                     rlay.addWidget(lbl, 0, QtCore.Qt.AlignCenter)
                     self.result_table.setCellWidget(row_idx, col_idx, rwrap)
-
                     self._attach_row_select(rwrap, row_idx)
                     continue
 
@@ -788,7 +830,6 @@ class DSOApp(QtWidgets.QWidget):
                     # ถ้า Found เป็น Not Found → คอลัมน์ทั้งหมดแดง ยกเว้น Requirement
                     if found.startswith("❌") and header != "Requirement":
                         item.setForeground(QColor(RED_HEX))
-
 
                     # Logic เดิมอื่น ๆ (ยังคงไว้)
                     elif header == "Match" and match.startswith("❌"):
