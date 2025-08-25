@@ -19,6 +19,6 @@ def handle_start_check(self):
     for row_idx, (_, row) in enumerate(result_df.iterrows()):
         for col_idx, value in enumerate(row):
             item = QtWidgets.QTableWidgetItem(str(value))
-            if str(row["Result"]).startswith("❌"):
+            if str(row.get("Found", "")).startswith("❌") or str(row.get("Match", "")).startswith("❌"):
                 item.setForeground(QtGui.QBrush(QtGui.QColor("red")))
             self.result_table.setItem(row_idx, col_idx, item)

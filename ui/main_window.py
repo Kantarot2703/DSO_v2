@@ -1,6 +1,7 @@
 import os, re
 import pandas as pd
 import logging
+import unicodedata as _ud
 from PyQt5.QtWidgets import QWidget, QLabel, QHBoxLayout, QVBoxLayout, QGridLayout, QHeaderView
 from PyQt5.QtCore import Qt
 from PyQt5 import QtWidgets, QtGui, QtCore
@@ -15,6 +16,55 @@ from collections import defaultdict
 
 
 APP_ICON_PATH = os.path.join("assets", "app", "dso_icon.ico")
+
+class _PdfWorker(QtCore.QThread):
+    finished = QtCore.pyqtSignal(list, list) 
+    error = QtCore.pyqtSignal(str)
+    def __init__(self, path):
+        super().__init__()
+        self.path = path
+    def run(self):
+        try:
+            pages = extract_text_by_page(self.path)
+            infos = extract_product_info_by_page(pages)
+            self.finished.emit(pages, infos)
+        except Exception as e:
+            self.error.emit(str(e))
+
+class _ExcelWorker(QtCore.QThread):
+    finished = QtCore.pyqtSignal(object)       # DataFrame
+    error = QtCore.pyqtSignal(str)
+    def __init__(self, path: str, pdf_basename: str):
+        super().__init__()
+        self.path = path
+        self.pdf_basename = pdf_basename
+    def run(self):
+        try:
+            df = load_checklist(self.path, self.pdf_basename)
+            self.finished.emit(df)
+        except Exception as e:
+            self.error.emit(str(e))
+
+class _CheckWorker(QtCore.QThread):
+    finished = QtCore.pyqtSignal(object)
+    error = QtCore.pyqtSignal(str)
+    def __init__(self, df_checklist, pages):
+        super().__init__()
+        self.df_checklist = df_checklist
+        self.pages = pages
+    def run(self):
+        try:
+            res = start_check(self.df_checklist, self.pages)
+            self.finished.emit(res)
+        except Exception as e:
+            self.error.emit(str(e))
+
+RED_HEX = "#ff1313"
+Y_ROW    = "#FFFACD"  
+Y_HOVER  = "#FCF4AF"  
+Y_SEL    = "#fff1b0"  
+G_HOVER  = "#eeeeee"
+G_SEL    = "#dddddd"
 
 class DSOApp(QtWidgets.QWidget):
     def __init__(self):
@@ -108,39 +158,79 @@ class DSOApp(QtWidgets.QWidget):
                 self.hovered_row = row
                 self.update_row_highlight()
         return super().eventFilter(source, event)
+    
+    class _RowClickFilter(QtCore.QObject):
+        def __init__(self, table, row, parent=None):
+            super().__init__(parent)
+            self._table = table
+            self._row = row
+        def eventFilter(self, obj, event):
+            if event.type() == QtCore.QEvent.MouseButtonPress:
+                try:
+                    self._table.setCurrentCell(self._row, 0)
+                    self._table.selectRow(self._row)
+                finally:
+                    return False
+            return False
+
+    def _attach_row_select(self, widget: QtWidgets.QWidget, row_idx: int):
+        f = DSOApp._RowClickFilter(self.result_table, row_idx, self)
+        widget.installEventFilter(f)
+        for ch in widget.findChildren(QtWidgets.QWidget):
+            ch.installEventFilter(f)
+        if not hasattr(self, "_row_filters"):
+            self._row_filters = []
+        self._row_filters.append(f)
 
     def update_row_highlight(self):
         verif_col = self.get_column_index("Verification")
+
+        # ใช้สี selection ของธีม OS/Qt เดียวกับที่ Qt ใช้กับ item ปกติ
+        sel_hex = self.palette().color(QtGui.QPalette.Highlight).name()
+
+        def paint_cell(row, col, bg_hex):
+            it = self.result_table.item(row, col)
+            if it:
+                it.setBackground(QColor(bg_hex))
+            w = self.result_table.cellWidget(row, col)
+            if w:
+                w.setStyleSheet(
+                    f"QWidget{{background-color:{bg_hex};}}"
+                    f" QLabel{{background-color:{bg_hex};}}"
+                )
+                for ch in w.findChildren(QtWidgets.QLabel):
+                    prev = ch.styleSheet() or ""
+                    if "background-color" in prev:
+                        ch.setStyleSheet(re.sub(r"background-color:[^;]+;", f"background-color:{bg_hex};", prev))
+                    else:
+                        ch.setStyleSheet(prev + f"background-color:{bg_hex};")
+
         for row in range(self.result_table.rowCount()):
             is_selected = self.result_table.selectionModel().isRowSelected(row, QtCore.QModelIndex())
-            is_hovered = (row == self.hovered_row)
-            for col in range(self.result_table.columnCount()):
-                item = self.result_table.item(row, col)
-                if not item:
-                    continue
+            is_hovered  = (row == self.hovered_row)
 
-                is_manual = False
-                if verif_col != -1:
-                    verif_item = self.result_table.item(row, verif_col)
-                    if verif_item:
-                        tag = verif_item.data(QtCore.Qt.UserRole)
-                        is_manual = (tag == "manual")
-                        if (not is_manual) and isinstance(verif_item.text(), str) and verif_item.text().strip().lower() == "manual":
-                            is_manual = True
+            # Manual
+            is_manual = False
+            if verif_col != -1:
+                verif_item = self.result_table.item(row, verif_col)
+                if verif_item:
+                    tag = verif_item.data(QtCore.Qt.UserRole)
+                    if isinstance(tag, str) and tag.strip().lower() == "manual":
+                        is_manual = True
+                    elif isinstance(verif_item.text(), str) and verif_item.text().strip().lower() == "manual":
+                        is_manual = True
+
+            # ถ้าเลือกแถว → ใช้ "สีน้ำเงินของธีม" เสมอ (ทับ Manual/Hover)
+            if is_selected:
+                bg = sel_hex
+            else:
                 if is_manual:
-                    if is_selected:
-                        item.setBackground(QColor("#fff1b0"))  
-                    elif is_hovered:
-                        item.setBackground(QColor("#FCF4AF"))  
-                    else:
-                        item.setBackground(QColor("#FFFACD"))  
+                    bg = Y_HOVER if is_hovered else Y_ROW
                 else:
-                    if is_selected:
-                        item.setBackground(QColor("#dddddd"))  
-                    elif is_hovered:
-                        item.setBackground(QColor("#eeeeee"))  
-                    else:
-                        item.setBackground(QColor("white"))
+                    bg = G_HOVER if is_hovered else "white"
+
+            for col in range(self.result_table.columnCount()):
+                paint_cell(row, col, bg)
 
     def get_column_index(self, column_name):
         for col in range(self.result_table.columnCount()):
@@ -151,49 +241,97 @@ class DSOApp(QtWidgets.QWidget):
 
     def load_pdf(self):
         path, _ = QtWidgets.QFileDialog.getOpenFileName(self, "Select PDF Artwork", "", "PDF Files (*.pdf)")
-        if path:
-            self.pdf_path = path
-            self.pdf_label.setText(f"PDF: {os.path.basename(path)}")
-            self.pages = extract_text_by_page(self.pdf_path)
-            self.product_infos = extract_product_info_by_page(self.pages)
+        if not path:
+            return
+
+        self.pdf_path = path
+        self.pdf_label.setText(f"PDF: {os.path.basename(path)}")
+
+        # กันกดซ้ำระหว่างโหลด
+        self.pdf_btn.setEnabled(False)
+        self.excel_btn.setEnabled(False)
+        self.check_btn.setEnabled(False)
+
+        self._pdf_worker = _PdfWorker(self.pdf_path)
+
+        def _ok(pages, infos):
+            self.pages = pages
+            self.product_infos = infos or []
+            self.pdf_btn.setEnabled(True)
+            self.excel_btn.setEnabled(True)
+            self.check_btn.setEnabled(bool(self.checklist_df))
+
+        def _err(msg):
+            QtWidgets.QMessageBox.critical(self, "PDF Error", msg)
+            self.pdf_btn.setEnabled(True)
+            self.excel_btn.setEnabled(True)
+            self.check_btn.setEnabled(bool(self.checklist_df))
+
+        self._pdf_worker.finished.connect(_ok)
+        self._pdf_worker.error.connect(_err)
+        self._pdf_worker.start()
 
     def load_excel(self):
-        if not self.pdf_path:
+        if not getattr(self, "pdf_path", None):
             QtWidgets.QMessageBox.warning(self, "PDF Required", "Please upload a PDF file first.")
             return
 
         path, _ = QtWidgets.QFileDialog.getOpenFileName(self, "Select Checklist Excel", "", "Excel Files (*.xlsx *.xls)")
-        if path:
-            self.excel_path = path
-            self.excel_label.setText(f"Checklist: {os.path.basename(path)}")
-            try:
-                self.checklist_df = load_checklist(path, os.path.basename(self.pdf_path))
-            except Exception as e:
-                QtWidgets.QMessageBox.critical(self, "Checklist Load Error", str(e))
+        if not path:
+            return
+
+        self.excel_path = path
+        self.excel_label.setText(f"Checklist: {os.path.basename(path)}")
+
+        self.pdf_btn.setEnabled(False)
+        self.excel_btn.setEnabled(False)
+        self.check_btn.setEnabled(False)
+
+        self._excel_worker = _ExcelWorker(self.excel_path, os.path.basename(self.pdf_path))
+
+        def _ok(df):
+            self.checklist_df = df
+            self.pdf_btn.setEnabled(True)
+            self.excel_btn.setEnabled(True)
+            self.check_btn.setEnabled(bool(self.pages))
+
+        def _err(msg):
+            QtWidgets.QMessageBox.critical(self, "Checklist Load Error", msg)
+            self.pdf_btn.setEnabled(True)
+            self.excel_btn.setEnabled(True)
+            self.check_btn.setEnabled(bool(self.pages))
+
+        self._excel_worker.finished.connect(_ok)
+        self._excel_worker.error.connect(_err)
+        self._excel_worker.start()
 
     def start_checking(self):
-        if self.checklist_df is None or not self.pages:
+        if getattr(self, "checklist_df", None) is None or not getattr(self, "pages", None):
             QtWidgets.QMessageBox.warning(self, "Missing File", "Please upload both Checklist and PDF before checking.")
             return
 
-        extracted_text_list = []
-        for page in self.pages:
-            page_items = []
-            for item in page:
-                if isinstance(item, dict) and "text" in item:
-                    page_items.append(item)
-            extracted_text_list.append(page_items)
+        self.check_btn.setEnabled(False)
+        self.export_btn.setEnabled(False)
 
-            # Check each term in the page
-            self.product_infos = extract_product_info_by_page(extracted_text_list)
+        self._check_worker = _CheckWorker(self.checklist_df, self.pages)
 
-        self.result_df = start_check(self.checklist_df, extracted_text_list)
+        def _ok(df):
+            self.result_df = df
+            if not isinstance(self.result_df, pd.DataFrame) or self.result_df.empty:
+                QtWidgets.QMessageBox.information(self, "No Result", "No matching terms found.")
+            else:
+                self.display_results(self.result_df)
+            self.check_btn.setEnabled(True)
+            self.export_btn.setEnabled(True)
 
-        if self.result_df.empty:
-            QtWidgets.QMessageBox.information(self, "No Result", "No matching terms found.")
-            return
+        def _err(msg):
+            QtWidgets.QMessageBox.critical(self, "Check Error", msg)
+            self.check_btn.setEnabled(True)
+            self.export_btn.setEnabled(True)
 
-        self.display_results(self.result_df)
+        self._check_worker.finished.connect(_ok)
+        self._check_worker.error.connect(_err)
+        self._check_worker.start()
 
     def display_results(self, df: pd.DataFrame):
         df_src = df.copy()
@@ -423,12 +561,34 @@ class DSOApp(QtWidgets.QWidget):
                                 break
 
                     # ตัดสินใจข้อความที่จะแสดง
-                    if html_val:
-                        display_text = html_val
-                        plain_for_measure = re.sub(r"<[^>]+>", "", html_val)
-                    elif term_text:
-                        display_text = term_text
-                        plain_for_measure = term_text
+                    def _norm_basic(s: str) -> str:
+                        s = str(s or "").replace("\u00a0", " ")
+                        s = _ud.normalize("NFKD", s)
+                        s = "".join(ch for ch in s if not _ud.combining(ch))
+                        return re.sub(r"\s+", " ", s).strip().lower()
+
+                    def _sameish(a: str, b: str) -> bool:
+                        A, B = _norm_basic(a), _norm_basic(b)
+                        if not A or not B:
+                            return False
+                        if A == B or (A in B) or (B in A):
+                            return True
+                        ta = {t for t in A.split() if len(t) > 1}
+                        tb = {t for t in B.split() if len(t) > 1}
+                        if not ta or not tb:
+                            return False
+                        inter = len(ta & tb)
+                        return inter / max(len(ta), len(tb)) >= 0.6 
+
+                    html_plain = re.sub(r"<[^>]+>", "", html_val) if html_val else ""
+
+                    if term_text:
+                        if html_val and _sameish(html_plain, term_text):
+                            display_text = html_val
+                            plain_for_measure = html_plain
+                        else:
+                            display_text = term_text
+                            plain_for_measure = term_text
                     else:
                         display_text = "" if has_images else "-"
                         plain_for_measure = ""
@@ -445,6 +605,9 @@ class DSOApp(QtWidgets.QWidget):
                     if display_text.strip():
                         term_label = QtWidgets.QLabel()
                         is_html_mode = bool(html_val)
+                        
+                        term_label.setFont(self.result_table.font())
+
                         term_label.setTextFormat(QtCore.Qt.RichText if is_html_mode else QtCore.Qt.PlainText)
                         term_label.setTextInteractionFlags(Qt.TextBrowserInteraction)
                         term_label.setAlignment(QtCore.Qt.AlignHCenter | QtCore.Qt.AlignVCenter)
@@ -469,7 +632,7 @@ class DSOApp(QtWidgets.QWidget):
 
                         # สีแดงกรณี Not Found (คงพฤติกรรมเดิม)
                         if str(row_ui.get("Found", "")).startswith("❌"):
-                            term_label.setStyleSheet("color:#b91c1c;")
+                            term_label.setStyleSheet(f"color:{RED_HEX};")
                         else:
                             term_label.setStyleSheet("")
 
@@ -488,7 +651,7 @@ class DSOApp(QtWidgets.QWidget):
                             img_wrap = QtWidgets.QWidget()
                             img_vbox = QtWidgets.QVBoxLayout(img_wrap)
                             padding_lr = 8
-                            img_vbox.setContentsMargins(padding_lr, 0, padding_lr, 0)  # กันภาพไม่ชิดขอบ
+                            img_vbox.setContentsMargins(padding_lr, 0, padding_lr, 0) 
                             img_vbox.setSpacing(8)
                             img_vbox.setAlignment(QtCore.Qt.AlignHCenter | QtCore.Qt.AlignVCenter)
 
@@ -514,6 +677,8 @@ class DSOApp(QtWidgets.QWidget):
 
                                 lbl = QtWidgets.QLabel()
                                 lbl.setAlignment(QtCore.Qt.AlignHCenter | QtCore.Qt.AlignVCenter)
+                                lbl.setFont(self.result_table.font())
+                                lbl.setStyleSheet(lbl.styleSheet() + " font-size: {}pt;".format(self.result_table.font().pointSize()))
 
                                 # เก็บเมตาไว้ใช้ตอนรีสเกลเมื่อคอลัมน์ถูกปรับ
                                 lbl.setProperty("img_path", p)
@@ -522,7 +687,7 @@ class DSOApp(QtWidgets.QWidget):
 
                                 if not pm:
                                     lbl.setText(f"[!] Missing image: {p}")
-                                    lbl.setStyleSheet("color:#b91c1c;")
+                                    lbl.setStyleSheet(f"color:{RED_HEX};")
                                     img_vbox.addWidget(lbl, 0, QtCore.Qt.AlignHCenter | QtCore.Qt.AlignVCenter)
                                     continue
 
@@ -554,11 +719,19 @@ class DSOApp(QtWidgets.QWidget):
                     url = str(row_src.get("Remark URL", "") or row_src.get("Remark Link", "") or "").strip()
                     txt = (str(value) if value is not None else "").strip()
 
+                    # ห่อด้วย container เพื่อควบคุม padding และติด event filter
+                    rwrap = QtWidgets.QWidget()
+                    rlay = QtWidgets.QVBoxLayout(rwrap)
+                    rlay.setContentsMargins(6, 2, 6, 2)  # padding
+                    rlay.setSpacing(0)
+
                     lbl = QtWidgets.QLabel()
                     lbl.setTextFormat(QtCore.Qt.RichText)
-                    lbl.setWordWrap(True)
                     lbl.setOpenExternalLinks(True)
                     lbl.setTextInteractionFlags(QtCore.Qt.TextBrowserInteraction)
+                    lbl.setAlignment(QtCore.Qt.AlignHCenter | QtCore.Qt.AlignVCenter)
+                    lbl.setWordWrap(True)
+                    lbl.setFont(self.result_table.font())   # ฟอนต์เท่าตาราง
 
                     if url and txt and txt not in ["-", "nan", "None"]:
                         lbl.setText(f'<a href="{url}">{QtCore.QCoreApplication.translate("", txt)}</a>')
@@ -573,8 +746,10 @@ class DSOApp(QtWidgets.QWidget):
                             return re.sub(r'(https?://[^\s]+)', r'<a href="\1">\1</a>', s)
                         lbl.setText(linkify(txt) if txt else "-")
 
-                    lbl.setAlignment(QtCore.Qt.AlignHCenter | QtCore.Qt.AlignVCenter)
-                    self.result_table.setCellWidget(row_idx, col_idx, lbl)
+                    rlay.addWidget(lbl, 0, QtCore.Qt.AlignCenter)
+                    self.result_table.setCellWidget(row_idx, col_idx, rwrap)
+
+                    self._attach_row_select(rwrap, row_idx)
                     continue
 
                 # คอลัมน์อื่นๆ 
@@ -596,9 +771,10 @@ class DSOApp(QtWidgets.QWidget):
                     if header in ["Found", "Match", "Font Size", "Note"]:
                         item.setForeground(QColor("gray"))
                 else:
-                    # ❌ ถ้า Found เป็น Not Found → คอลัมน์ทั้งหมดแดง ยกเว้น Requirement
+                    # ถ้า Found เป็น Not Found → คอลัมน์ทั้งหมดแดง ยกเว้น Requirement
                     if found.startswith("❌") and header != "Requirement":
-                        item.setForeground(QColor("red"))
+                        item.setForeground(QColor(RED_HEX))
+
 
                     # Logic เดิมอื่น ๆ (ยังคงไว้)
                     elif header == "Match" and match.startswith("❌"):

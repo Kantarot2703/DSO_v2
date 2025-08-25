@@ -2,8 +2,7 @@ import os, io, re
 import html as _html
 import pandas as pd
 import logging
-import unicodedata
-import html
+import unicodedata as _ud
 from PyQt5.QtCore import Qt
 from openpyxl import load_workbook
 from openpyxl.styles.colors import Color
@@ -12,6 +11,10 @@ from collections import defaultdict
 
 # Allowed part codes from PDF filenames
 ALLOWED_PART_CODES = ['UU1_DOM', 'DOM', 'UU1', '2LB', '2XV', '4LB', '19L', '19A', '21A', 'DC1']
+
+def _contains_any(s: str, keys) -> bool:
+    s = (s or "").lower()
+    return any(k in s for k in keys)
 
 def _pt_to_mm(pt: float) -> float:
     return (pt or 0.0) * 25.4 / 72.0
@@ -29,14 +32,24 @@ def _pick_size_mm(item: dict) -> float:
     return _pt_to_mm(val) if unit == "pt" else val
 
 def _parse_threshold_to_mm(spec_text: str):
+    """
+    ดึง threshold ฟอนต์จากสเปก รองรับทั้ง ≥, <=, >=, >, < และหน่วย mm/pt (มีจุดก็ได้)
+    คืนค่าเป็น "มิลลิเมตร" เสมอ (ถ้าจับไม่ได้ → None)
+    """
     if not isinstance(spec_text, str):
         return None
-    s = spec_text.lower()
-    m = re.search(r"≥\s*(\d+(?:\.\d+)?)", s)
+    s = spec_text.lower().strip()
+
+    # ตัวอย่างที่รองรับ:
+    # "≥ 2 mm.", ">=2mm", "> 8 pt", "min size 2 mm", "size must be >= 1.5mm"
+    m = re.search(r"(≥|<=|>=|<|>)\s*(\d+(?:\.\d+)?)\s*(mm\.?|pt\.?)?", s)
     if not m:
         return None
-    val = float(m.group(1))
-    return _pt_to_mm(val) if ("pt" in s or "point" in s) else val
+    val = float(m.group(2))
+    unit = (m.group(3) or "mm").replace(".", "").strip()
+    if unit.startswith("pt"):
+        return (val * 25.4) / 72.0
+    return val
 
 def _fmt_mm(x: float) -> str:
     return f"{x:.1f} mm"
@@ -66,6 +79,13 @@ def _dedup_notes(notes):
         seen.add(k)
         out.append(s)
     return out
+
+def _is_all_caps_approx(s: str) -> bool:
+    s = _ud.normalize("NFKC", str(s or ""))
+    letters = [ch for ch in s if ch.isalpha()]
+    if not letters:
+        return False
+    return all(ch == ch.upper() for ch in letters)
 
 def normalize_headers(df):
     rename = {}
@@ -202,7 +222,7 @@ def fuzzy_find_columns(df):
 def normalize_text(text):
     if not isinstance(text, str):
         return ""
-    text = unicodedata.normalize('NFKC', text)
+    text = _ud.normalize('NFKC', text)
     text = re.sub(r"\([^)]*\)", "", text) 
     text = text.replace("’", "'")  
     text = re.sub(r"\s+", " ", text)    
@@ -235,7 +255,7 @@ def extract_underlines_from_excel(excel_path, sheet_name, header_row_index, df):
         term_col_idx = list(df.columns).index(term_col_name) + 1
 
         def _cell_rich_to_html(cell, plain_text: str) -> str:
-            import html as _html, logging
+
             txt_plain = _html.escape(plain_text or "")
 
             try:
@@ -418,6 +438,15 @@ def load_checklist(excel_path, pdf_filename=None):
                 df.columns = [str(c).replace("\n", " ").strip() for c in df.columns]
                 df = df[header_row_index + 1:].reset_index(drop=True)
                 logging.info(f"🧾 Header chosen at row {header_row_index+1} | columns: {list(df.columns)[:6]}...")
+
+                # Normalize header names (เพิ่ม mapping ให้คอลัมน์ Verification)
+                _ren = {}
+                for c in list(df.columns):
+                    n = str(c).strip().lower()
+                    if "verify" in n or "verification" in n or "ตรวจ" in n:  # ครอบคลุม EN/TH
+                        _ren[c] = "Verification"
+                if _ren:
+                    df = df.rename(columns=_ren)
 
                 # Column Mapping
                 term_col, lang_col, spec_col = fuzzy_find_columns(df)
@@ -671,7 +700,6 @@ def start_check(df_checklist, extracted_text_list):
     logger = logging.getLogger(__name__)
 
     results = []
-    all_texts = []
     grouped = defaultdict(list)
 
     skip_keywords = [
@@ -680,27 +708,25 @@ def start_check(df_checklist, extracted_text_list):
     ]
 
     manual_keywords = [
+        #EN
         "brand logo", "copyright for t&f", "space for date code", "lion mark", "lionmark", "lion-mark", "ce mark", "en 71",
         "ukca", "mc mark", "cib", "argentina logo", "brazilian logo", "italy requirement", "france requirement",
         "sorting & donation label", "spain sorting symbols", "usa warning statement", "international warning statement",
-        "upc requirement", "list of content : text", "list of content : pictorial", "product’s common", "product's common", "generic name"
+        "upc requirement", "list of content : text", "list of content : pictorial", "product’s common", "product's common", "generic name",
+        # TH
+        "โลโก้", "ลิขสิทธิ์", "ตรา", "สัญลักษณ์", "เครื่องหมาย",
+        "สำรองพื้นที่รหัสวันที่", "เครื่องหมายรับรอง"
     ]
 
-    def is_artwork_page(page_items):
-        if len(page_items) < 10:
-            return False
-        for item in page_items:
-            if isinstance(item, dict) and _pick_size_mm(item) >= 1.6:
-                return True
-        return False
+    # ใช้ทุกหน้า ไม่คัดกรอง
+    artwork_pages = list(extracted_text_list)
+    page_mapping = {i + 1: i + 1 for i in range(len(extracted_text_list))}
 
-    artwork_pages = []
-    page_mapping = {}
-
-    for real_page_index, page_items in enumerate(extracted_text_list):
-        if is_artwork_page(page_items):
-            artwork_pages.append(page_items)
-            page_mapping[len(artwork_pages)] = real_page_index + 1
+    logger.info(
+        "📄 Pages considered: %d (real pages: %s)",
+        len(artwork_pages),
+        list(page_mapping.values())
+    )
 
     logger.info(
     "📄 Artwork-like pages considered: %d (real pages: %s)",
@@ -708,6 +734,7 @@ def start_check(df_checklist, extracted_text_list):
     list(page_mapping.values())
     )
 
+    all_texts = []
     for artwork_index, page_items in enumerate(artwork_pages):
         for item in page_items:
             text_norm = normalize_text(item.get("text", ""))
@@ -727,12 +754,28 @@ def start_check(df_checklist, extracted_text_list):
         spec = "-" if spec.lower() in ["", "n/a", "none", "unspecified", "nan"] else spec
         spec_norm = normalize_text(spec)
 
+        spec_lower = spec.lower() if isinstance(spec, str) else ""
+
         # Term (ไม่ดึงค่าจากแถวอื่น)
         term_raw = row.get("Symbol/Exact wording", None)
         term_cell_raw = str(term_raw) if pd.notna(term_raw) else ""
         term_cell_clean = term_cell_raw.strip()
         term_cell_clean = "-" if term_cell_clean.lower() in ["", "n/a", "none", "unspecified", "nan"] else term_cell_clean
-        term_lines = [term_cell_clean] if term_cell_clean != "-" else []
+        
+        term_html = str(row.get("__Term_HTML__", "") or "")
+        term_lines = []
+        if term_cell_clean != "-":
+            term_lines.append(term_cell_clean)
+            if term_html.strip():
+                try:
+                    under_parts = _extract_underlined_substrings(term_html)  
+                    for up in under_parts:
+                        if up and up not in term_lines:
+                            term_lines.append(up)
+                except Exception:
+                    pass
+        else:
+            term_lines = []
 
         # HARD SKIP: ถ้าแถวถูกระบุ Manual ใน Excel ให้ข้ามการตรวจทั้งหมด
         raw_verif = (str(row.get("Verification", "")) or "").strip().lower()
@@ -754,34 +797,25 @@ def start_check(df_checklist, extracted_text_list):
             })
             continue
 
-        # ตรวจ Manual
-        is_manual = any(kw in req_norm for kw in manual_keywords)
-
         # ข้าม row ไม่จำเป็น
         if any(kw in req_norm for kw in skip_keywords) or any(kw in spec_norm for kw in skip_keywords):
             continue
 
-        # VERIFIED SECTION
-        if not is_manual:
-            if not term_lines:
-                has_image = bool(row.get("_HasImage", False))
-                if has_image:
-                    grouped[(requirement, spec, "Manual")].append({
-                        "Term": "-",
-                        "Remark": remark_text or "-",
-                        "Remark URL": remark_link or "-",
-                        "Found": "❌ Not Found",
-                        "Match": "❌",
-                        "Pages": "-",
-                        "Font Size": "-",
-                        "Note": "-",
-                        "Package Panel": package_panel,
-                        "Procedure": procedure,
-                        "__Term_HTML__": row.get("__Term_HTML__", ""),
-                        "Image_Groups_Resolved": row.get("Image_Groups_Resolved", row.get("Image_Groups", [])),
-                    })
-                    continue 
-                continue
+        remark_norm = normalize_text(remark_text)
+        term_norm   = normalize_text(term_cell_clean)
+        fields_norm = " ".join([req_norm, spec_norm, remark_norm])
+
+        is_manual = any(kw in fields_norm for kw in manual_keywords)
+
+        # Force manual เมื่อไม่มี term แต่มีภาพ (ไว้รอ OCR ภายหลัง)
+        if not term_lines:
+            is_manual = True
+
+        # ถ้ามีภาพ และเจอคำที่ส่อว่าเป็นโลโก้/ลิขสิทธิ์ → Manual
+        if bool(row.get("_HasImage", False)) and any(
+            k in fields_norm for k in ["logo", "mark", "symbol", "copyright", "t&f", "t & f", "©", "™", "®"]
+        ):
+            is_manual = True
 
         # MANUAL SECTION 
         if is_manual:
@@ -850,131 +884,144 @@ def start_check(df_checklist, extracted_text_list):
                     })
             continue
 
+        STOPWORDS = {"in","en","na","de","la","el","em","da","do","di","du","of","and","y","et","the","a","an"}
+
+        def _split_term_variants(term_raw: str):
+            s = str(term_raw or "")
+            s = s.replace("\r", "")
+            s = re.sub(r"<br\s*/?>", "\n", s, flags=re.I)
+
+            parts = []
+
+            primary = [p.strip() for p in re.split(r"[\n;|]+", s) if p.strip()]
+            for chunk in primary:
+                if re.search(r"\b(or|หรือ)\b", chunk, flags=re.I):
+                    for seg in re.split(r"\b(?:or|หรือ)\b", chunk, flags=re.I):
+                        seg = seg.strip(" ,/").strip()
+                        if seg:
+                            parts.append(seg)
+                    continue
+
+                for seg in re.split(r"[\/,]", chunk):
+                    seg = seg.strip()
+                    if seg:
+                        parts.append(seg)
+
+            return parts or [s.strip()]
+
+        def _match_items_for_variant(variant_norm: str, all_texts):
+            generic_drop = {"requirement", "address", "code"}
+            keep = {"astm", "iso", "en71", "f963", "eu", "us", "uk", "br", "ca", "brazil", "canada", "canadian"}
+
+            tokens = re.findall(r"[a-z0-9]+(?:-[a-z0-9]+)?", variant_norm)
+            words = [w for w in tokens if (len(w) >= 3 or w in keep) and w not in generic_drop and w not in STOPWORDS]
+
+            matched_items, pages = [], []
+            for text_norm, page_number, item in all_texts:
+                if (variant_norm and variant_norm in text_norm) or (words and all(w in text_norm for w in words)):
+                    matched_items.append(item)
+                    pages.append(page_number)
+            return matched_items, pages
+
+        def _all_caps_items(items):
+            got = False
+            for it in items:
+                t = (it.get("text") or "").strip()
+                if t:
+                    got = True
+                    if not _is_all_caps_approx(t):
+                        return False
+            return got
+
         # VERIFIED SECTION
         for term in term_lines:
-            term_norm = normalize_text(term)
-            if not term_norm or any(kw in term_norm for kw in skip_keywords):
-                continue
+            variants = _split_term_variants(term)
 
-            # รองรับ "or" ใน term เช่น "DOM or UU1"
-            sep = " or "
-            term_variants = [t.strip() for t in term_norm.split(sep)] if sep in term_norm else [term_norm]
+            # เลือก variant ที่ "จับได้ดีที่สุด"
+            best = {"items": [], "pages": [], "variant": ""}
+            best_score = -1
+            ul_keys    = ("underline", "ขีดเส้นใต้")
+            no_ul_keys = ("no underline", "ไม่มีขีดเส้นใต้")
 
-            found_pages = []
-            matched_items = []
-            seen = set () # กันซ้ำด้วย (page_number, id(item))
-            
-            # OR loop
-            for variant in term_variants:
-                if not variant:
-                    continue
-                for text_norm, page_number, item in all_texts:
-                    if variant in text_norm:
-                        key = (page_number, id(item))
-                        if key not in seen:
-                            seen.add(key)
-                            found_pages.append(page_number)
-                            matched_items.append(item)
+            for v in variants:
+                v_norm = normalize_text(v)
+                items, pages = _match_items_for_variant(v_norm, all_texts)
 
-            if not found_pages:
-                term_words = term_norm.split()
-                for text_norm, page_number, item in all_texts:
-                    if any(w in text_norm for w in term_words):
-                        key = (page_number, id(item))
-                        if key not in seen:
-                            seen.add(key)
-                            found_pages.append(page_number)
-                            matched_items.append(item)
+                score = len(items)
 
-            found_flag = "✅ Found" if found_pages else "❌ Not Found"
-            match_result = "✔"
-            notes = []
+                if _contains_any(spec_lower, ul_keys):
+                    score += 1000 * len([i for i in items if bool(i.get("underline"))])
+                if _contains_any(spec_lower, no_ul_keys):
+                    score += 1000 * len([i for i in items if not bool(i.get("underline"))])
+                
+                if score > best_score:
+                    best_score = score
+                    best = {"items": items, "pages": pages, "variant": v}
 
-            # ใช้ mm จริงเทียบสเปก และสรุปเหตุผลเพียงครั้งเดีย
-            sizes_mm     = [_pick_size_mm(i) for i in matched_items]
-            max_size_mm  = max(sizes_mm) if sizes_mm else 0.0
+            matched_items = best["items"]
+            found_pages   = best["pages"]
 
+            found_flag    = "✅ Found" if found_pages else "❌ Not Found"
+            match_result  = "✔"
+            notes         = []
+
+            # กุญแจสเปก (ใช้ซ้ำ)
+            ul_keys    = ("underline", "ขีดเส้นใต้")
+            no_ul_keys = ("no underline", "ไม่มีขีดเส้นใต้")
+
+            if _contains_any(spec_lower, ul_keys):
+                matched_items = [i for i in matched_items if bool(i.get("underline"))]
+            if _contains_any(spec_lower, no_ul_keys):
+                matched_items = [i for i in matched_items if not bool(i.get("underline"))]
+
+            sizes_mm    = [_pick_size_mm(i) for i in matched_items]
+            max_size_mm = max(sizes_mm) if sizes_mm else 0.0
             bolds       = [bool(i.get("bold", False)) for i in matched_items]
             underlines  = [bool(i.get("underline", False)) for i in matched_items]
-            texts       = [i.get("text", "") for i in matched_items]
 
-            font_size_str = "-"
-            spec_lower = spec.lower() if isinstance(spec, str) else ""
-
+            # ---- Bold ---- (ต้อง bold ทั้งชุดของ variant)
             if found_pages and matched_items and spec != "-":
-                if "bold" in spec_lower and not any(bolds):
+                if _contains_any(spec_lower, ("bold", "ตัวหนา")) and not (matched_items and all(bolds)):
                     match_result = "❌"
                     notes.append("Not Bold")
 
-            # Flexible Underline Check 
-            underline_direct = any(underlines)
-            underline_partial = False
-            html_src = row.get("__Term_HTML__", "") or row.get("Term_Underline_HTML", "")
-            need_u_parts = _extract_underlined_substrings(html_src)
-
-            pages_set = set(found_pages)
-
-            if need_u_parts:
-                need_u_norm = [normalize_text(x) for x in need_u_parts if str(x).strip()]
-                for txt_norm, pg, item in all_texts:
-                    if pg in pages_set and item and item.get("underline"):
-                        if any(frag and (frag in txt_norm) for frag in need_u_norm):
-                            underline_partial = True
-                            break
-            else:
-                term_words = [w for w in term_norm.split() if len(w) > 1]
-                for txt_norm, pg, item in all_texts:
-                    if pg in pages_set and item and item.get("underline"):
-                        if any(w in txt_norm for w in term_words):
-                            underline_partial = True
-                            break
-
-            underline_present = underline_direct or underline_partial
-
-            # ตัดสินตามสเปก
-            if "no underline" in spec_lower:
+            # ---- Underline ----
+            underline_present = bool(matched_items and any(underlines))
+            if _contains_any(spec_lower, ("no underline", "ไม่มีขีดเส้นใต้")):
                 if underline_present:
                     match_result = "❌"
                     notes.append("Underline must be absent")
-            elif "underline" in spec_lower:
+            elif _contains_any(spec_lower, ("underline", "ขีดเส้นใต้")):
                 if not underline_present:
                     match_result = "❌"
                     notes.append("Underline Missing")
 
-            if "all caps" in spec_lower and not any(t.isupper() for t in texts):
-                match_result = "❌"
-                notes.append("Not All Caps")
+            # ---- All Caps ---- (ต้อง all-caps ทั้งชุดของ variant)
+            if _contains_any(spec_lower, ("all caps", "ตัวพิมพ์ใหญ่ทั้งหมด", "ตัวใหญทั้งหมด", "พิมพ์ใหญ่ทั้งหมด")):
+                if not _all_caps_items(matched_items):
+                    match_result = "❌"
+                    notes.append("Not All Caps")
 
-            # เกณฑ์ฟอนต์ → แปลงเป็น mm เสมอ
+            # ---- Font size ----
             thr_mm = _parse_threshold_to_mm(spec_lower)
+            font_size_str = "-"
             if thr_mm is not None:
                 if max_size_mm < thr_mm:
                     match_result  = "❌"
                     font_size_str = "❌"
-                    notes.append(f"font {_fmt_mm(max_size_mm)}") 
+                    notes.append(f"font {_fmt_mm(max_size_mm)}")
                 else:
                     font_size_str = "✔"
             else:
                 font_size_str = "✔" if match_result == "✔" else "-"
-        else:
-            font_size_str = "-"
 
-            # หน้าที่พบ
+            # ---- Pages ----
             pages = sorted(set(found_pages))
-            all_pages = sorted(set(p for _, p, _ in all_texts))
-            page_str = "All pages" if set(pages) == set(all_pages) else ", ".join(str(p) for p in pages)
+            all_pages_nums = sorted(set(p for _, p, _ in all_texts))
+            page_str = "All pages" if set(pages) == set(all_pages_nums) else (", ".join(str(p) for p in pages) if pages else "-")
 
-            # log
-            if found_pages:
-                logger.info("✅ [FOUND] Req: '%s' | Term: '%s' | Pages: %s | Match: %s | Font: %s | Notes: %s",
-                            requirement, term, (page_str or "-"),
-                            match_result, font_size_str, (", ".join(notes) or "-"))
-            else:
-                logger.warning("❌ [NOT FOUND] Req: '%s' | Term tried: '%s'", requirement, term)
-
-            # รวมโน้ตไม่ให้ซ้ำ
-            note_list = _dedup_notes(notes)
-            note_str  = ", ".join(note_list) if note_list else "-"
+            # ---- Notes ----
+            note_str = ", ".join(_dedup_notes(notes)) if notes else "-"
 
             grouped[(requirement, spec, "Verified")].append({
                 "Term": term,
@@ -986,10 +1033,10 @@ def start_check(df_checklist, extracted_text_list):
                 "Verification": "Verified",
                 "Remark": remark_text,
                 "Remark URL": remark_link,
-                "Package Panel": package_panel,   
+                "Package Panel": package_panel,
                 "Procedure": procedure,
                 "__Term_HTML__": row.get("__Term_HTML__", ""),
-                "Image_Groups_Resolved": row.get("Image_Groups_Resolved", row.get("Image_Groups", [])),         
+                "Image_Groups_Resolved": row.get("Image_Groups_Resolved", row.get("Image_Groups", [])),
             })
 
     final_results = []

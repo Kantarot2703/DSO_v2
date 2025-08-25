@@ -1,7 +1,19 @@
 import pandas as pd
+import unicodedata as _ud
 
 def is_all_caps(text):
     return text == text.upper() and any(c.isalpha() for c in text)
+
+def _is_uppercase_text(s: str) -> bool:
+    """
+    True ถ้า 'ทุกตัวอักษร' ในสตริงเป็นตัวพิมพ์ใหญ่ (ตัวเลข/เว้นวรรค/สัญลักษณ์ อนุญาต)
+    รองรับอักขระมีวรรณยุกต์/แอคเซนต์ เช่น Á, Ç, Ñ, Î
+    """
+    s = _ud.normalize("NFKC", str(s or ""))
+    letters = [ch for ch in s if ch.isalpha()]
+    if not letters:
+        return False
+    return all(ch.isupper() for ch in letters)
 
 def check_term_in_page(term, page_items, rule):
     results = []
@@ -20,11 +32,11 @@ def check_term_in_page(term, page_items, rule):
                 matched = False
                 reasons.append("Not underlined")
 
-            if rule.get('Uppercase', False) and not item['text'].istitle():
+            if rule.get('Uppercase', False) and not _is_uppercase_text(item['text']):
                 matched = False
                 reasons.append("Not uppercase")
 
-            if rule.get('All Caps (ตัวหนา+ตัวใหญทั้งหมด)', False) and not is_all_caps(item['text']):
+            if rule.get('All Caps (ตัวหนา+ตัวใหญทั้งหมด)', False) and not _is_uppercase_text(item['text']):
                 matched = False
                 reasons.append("Not all caps")
 
