@@ -2,6 +2,7 @@ import os, io, re
 import html as _html
 import pandas as pd
 import logging
+import fitz
 import unicodedata as _ud
 from PyQt5.QtCore import Qt
 from openpyxl import load_workbook
@@ -32,10 +33,6 @@ def _pick_size_mm(item: dict) -> float:
     return _pt_to_mm(val) if unit == "pt" else val
 
 def _parse_threshold_to_mm(spec_text: str):
-    """
-    ดึง threshold ฟอนต์จากสเปก รองรับทั้ง ≥, <=, >=, >, < และหน่วย mm/pt (มีจุดก็ได้)
-    คืนค่าเป็น "มิลลิเมตร" เสมอ (ถ้าจับไม่ได้ → None)
-    """
     if not isinstance(spec_text, str):
         return None
     s = spec_text.lower().strip()
@@ -55,7 +52,6 @@ def _fmt_mm(x: float) -> str:
     return f"{x:.1f} mm"
 
 def _extract_underlined_substrings(html_text: str) -> list:
-    """ดึงคำ/วลีที่อยู่ใน <u>...</u> แล้วคืนเป็นลิสต์ (ล้างแท็กอื่นออก)"""
     if not isinstance(html_text, str) or not html_text.strip():
         return []
     parts = []
@@ -67,7 +63,6 @@ def _extract_underlined_substrings(html_text: str) -> list:
     return parts
 
 def _dedup_notes(notes):
-    """ลบข้อความซ้ำแบบไม่สนตัวพิมพ์ คงลำดับตัวแรกไว้"""
     out, seen = [], set()
     for n in notes or []:
         s = str(n).strip()
@@ -156,8 +151,44 @@ def get_strikeout_or_red_text_rows(excel_path, sheet_name, header_row_index):
 
 def extract_part_code_from_pdf(pdf_filename):
     basename = os.path.basename(pdf_filename).upper().replace(" ", "").replace(",", "")
-    detected = [code for code in ALLOWED_PART_CODES if code in basename]
-    return list(set(detected))
+    found = []
+
+    for code in ALLOWED_PART_CODES:
+        if code in basename and code not in found:
+            found.append(code)
+
+    # สแกนเนื้อหา PDF (หน้าแรกๆ) เพิ่มเติม
+    try:
+        doc = fitz.open(pdf_filename)
+        try:
+            pages_to_scan = min(8, len(doc))
+            tokens = set()
+            for i in range(pages_to_scan):
+                txt = (doc.load_page(i).get_text("text") or "").upper()
+                for t in re.split(r"[^A-Z0-9_]+", txt):
+                    t = t.strip()
+                    if t:
+                        tokens.add(t)
+
+            # เติมโค้ดที่พบในเนื้อหา
+            for code in ALLOWED_PART_CODES:
+                if code in tokens and code not in found:
+                    found.append(code)
+
+            # case รวม: ถ้ามีทั้ง UU1 และ DOM → ใส่ UU1_DOM ด้วย
+            if ("UU1" in tokens and "DOM" in tokens) and ("UU1_DOM" not in found):
+                found.insert(0, "UU1_DOM")
+        finally:
+            doc.close()
+    except Exception:
+        pass
+
+    # คืนค่าแบบไม่ซ้ำ คงลำดับเดิม
+    out = []
+    for c in found:
+        if c not in out:
+            out.append(c)
+    return out
 
 def fuzzy_find_columns(df):
     term_col = None
@@ -718,9 +749,21 @@ def start_check(df_checklist, extracted_text_list):
         "สำรองพื้นที่รหัสวันที่", "เครื่องหมายรับรอง"
     ]
 
-    # ใช้ทุกหน้า ไม่คัดกรอง
-    artwork_pages = list(extracted_text_list)
-    page_mapping = {i + 1: i + 1 for i in range(len(extracted_text_list))}
+    # คัดหน้า artwork เท่านั้น (ตัดหน้าปก/หน้าไม่ใช่งานศิลป์ออก)
+    def is_artwork_page(page_items):
+        if len(page_items) < 10:
+            return False
+        for it in page_items:
+            if isinstance(it, dict) and _pick_size_mm(it) >= 1.6:
+                return True
+        return False
+
+    artwork_pages = []
+    page_mapping  = {}
+    for real_idx, page_items in enumerate(extracted_text_list):
+        if is_artwork_page(page_items):
+            artwork_pages.append(page_items)
+            page_mapping[len(artwork_pages)] = real_idx + 1  
 
     logger.info(
         "📄 Pages considered: %d (real pages: %s)",
@@ -948,12 +991,11 @@ def start_check(df_checklist, extracted_text_list):
                 items, pages = _match_items_for_variant(v_norm, all_texts)
 
                 score = len(items)
-
                 if _contains_any(spec_lower, ul_keys):
                     score += 1000 * len([i for i in items if bool(i.get("underline"))])
                 if _contains_any(spec_lower, no_ul_keys):
                     score += 1000 * len([i for i in items if not bool(i.get("underline"))])
-                
+
                 if score > best_score:
                     best_score = score
                     best = {"items": items, "pages": pages, "variant": v}
@@ -961,32 +1003,35 @@ def start_check(df_checklist, extracted_text_list):
             matched_items = best["items"]
             found_pages   = best["pages"]
 
-            found_flag    = "✅ Found" if found_pages else "❌ Not Found"
-            match_result  = "✔"
-            notes         = []
+            found_flag   = "✅ Found" if found_pages else "❌ Not Found"
+            match_result = "✔"
+            notes        = []
 
-            # กุญแจสเปก (ใช้ซ้ำ)
-            ul_keys    = ("underline", "ขีดเส้นใต้")
-            no_ul_keys = ("no underline", "ไม่มีขีดเส้นใต้")
+            # ใส่เหตุผลเมื่อไม่พบ
+            if not found_pages:
+                notes.append("Not found on artwork pages")
+                if bool(row.get("_HasImage", False)):
+                    notes.append("Text may be image-only")
 
+            # กรองตามสเปกจริง (underline/no-underline)
             if _contains_any(spec_lower, ul_keys):
                 matched_items = [i for i in matched_items if bool(i.get("underline"))]
             if _contains_any(spec_lower, no_ul_keys):
                 matched_items = [i for i in matched_items if not bool(i.get("underline"))]
 
-            sizes_mm    = [_pick_size_mm(i) for i in matched_items]
-            max_size_mm = max(sizes_mm) if sizes_mm else 0.0
             bolds       = [bool(i.get("bold", False)) for i in matched_items]
             underlines  = [bool(i.get("underline", False)) for i in matched_items]
+            sizes_mm    = [_pick_size_mm(i) for i in matched_items]
+            max_size_mm = max(sizes_mm) if sizes_mm else None  
 
-            # ---- Bold ---- (ต้อง bold ทั้งชุดของ variant)
+            # ---- Bold ----
             if found_pages and matched_items and spec != "-":
-                if _contains_any(spec_lower, ("bold", "ตัวหนา")) and not (matched_items and all(bolds)):
+                if _contains_any(spec_lower, ("bold", "ตัวหนา")) and not all(bolds):
                     match_result = "❌"
                     notes.append("Not Bold")
 
             # ---- Underline ----
-            underline_present = bool(matched_items and any(underlines))
+            underline_present = any(underlines)
             if _contains_any(spec_lower, ("no underline", "ไม่มีขีดเส้นใต้")):
                 if underline_present:
                     match_result = "❌"
@@ -996,29 +1041,32 @@ def start_check(df_checklist, extracted_text_list):
                     match_result = "❌"
                     notes.append("Underline Missing")
 
-            # ---- All Caps ---- (ต้อง all-caps ทั้งชุดของ variant)
+            # ---- All Caps ----
             if _contains_any(spec_lower, ("all caps", "ตัวพิมพ์ใหญ่ทั้งหมด", "ตัวใหญทั้งหมด", "พิมพ์ใหญ่ทั้งหมด")):
                 if not _all_caps_items(matched_items):
                     match_result = "❌"
                     notes.append("Not All Caps")
 
-            # ---- Font size ----
+            # ---- Font size ----  (อย่ารายงาน 0.0 mm เมื่อไม่มี item ให้วัด)
             thr_mm = _parse_threshold_to_mm(spec_lower)
             font_size_str = "-"
             if thr_mm is not None:
-                if max_size_mm < thr_mm:
-                    match_result  = "❌"
-                    font_size_str = "❌"
-                    notes.append(f"font {_fmt_mm(max_size_mm)}")
+                if matched_items and (max_size_mm is not None):
+                    if max_size_mm < thr_mm:
+                        match_result  = "❌"
+                        font_size_str = "❌"
+                        notes.append(f"font {_fmt_mm(max_size_mm)}")
+                    else:
+                        font_size_str = "✔"
                 else:
-                    font_size_str = "✔"
-            else:
-                font_size_str = "✔" if match_result == "✔" else "-"
+                    # ไม่มีข้อความให้วัดขนาดฟอนต์
+                    notes.append("No measurable text for font size")
 
             # ---- Pages ----
             pages = sorted(set(found_pages))
-            all_pages_nums = sorted(set(p for _, p, _ in all_texts))
-            page_str = "All pages" if set(pages) == set(all_pages_nums) else (", ".join(str(p) for p in pages) if pages else "-")
+            all_pages_nums = sorted(set(p for _, p, _ in all_texts))  # (ควรเป็นหน้า artwork เท่านั้น)
+            page_str = "All Pages" if pages and set(pages) == set(all_pages_nums) \
+                    else (", ".join(str(p) for p in pages) if pages else "-")
 
             # ---- Notes ----
             note_str = ", ".join(_dedup_notes(notes)) if notes else "-"

@@ -2,15 +2,16 @@ import os, re
 import pandas as pd
 import logging
 import unicodedata as _ud
+import html as _html
 from PyQt5.QtWidgets import QWidget, QLabel, QHBoxLayout, QVBoxLayout, QGridLayout, QHeaderView
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import Qt, QUrl
 from PyQt5 import QtWidgets, QtGui, QtCore
 from ui.pdf_viewer import PDFViewer
 from checklist_loader import load_checklist, start_check
 from pdf_reader import extract_text_by_page
 from checker import check_term_in_page
 from result_exporter import export_result_to_excel
-from PyQt5.QtGui import QColor, QIcon, QPixmap
+from PyQt5.QtGui import QColor, QIcon, QPixmap, QDesktopServices
 from pdf_reader import extract_product_info_by_page
 from collections import defaultdict
 
@@ -182,17 +183,26 @@ class DSOApp(QtWidgets.QWidget):
             self._row = row
         def eventFilter(self, obj, event):
             if event.type() == QtCore.QEvent.MouseButtonPress:
-                try:
-                    self._table.setCurrentCell(self._row, 0)
-                    self._table.selectRow(self._row)
-                finally:
-                    return False
+                # ถ้าคลิกที่ QLabel ที่มีลิงก์ → ปล่อยให้ QLabel จัดการเอง
+                if isinstance(obj, QtWidgets.QLabel):
+                    try:
+                        t = (obj.text() or "").lower()
+                    except Exception:
+                        t = ""
+                    if "<a " in t or 'href="' in t:
+                        return False
+                # อื่น ๆ → เลือกทั้งแถวตามปกติ
+                self._table.setCurrentCell(self._row, 0)
+                self._table.selectRow(self._row)
+                return False
             return False
 
     def _attach_row_select(self, widget: QtWidgets.QWidget, row_idx: int):
         f = DSOApp._RowClickFilter(self.result_table, row_idx, self)
         widget.installEventFilter(f)
         for ch in widget.findChildren(QtWidgets.QWidget):
+            if isinstance(ch, QtWidgets.QLabel):
+                continue
             ch.installEventFilter(f)
         if not hasattr(self, "_row_filters"):
             self._row_filters = []
@@ -225,8 +235,8 @@ class DSOApp(QtWidgets.QWidget):
     def update_row_highlight(self):
         verif_col = self.get_column_index("Verification")
 
-        # ใช้สี selection ของธีม OS/Qt เดียวกับที่ Qt ใช้กับ item ปกติ
         sel_hex = self.palette().color(QtGui.QPalette.Highlight).name()
+        V_BG = "#F3F6FF" 
 
         def paint_cell(row, col, bg_hex):
             it = self.result_table.item(row, col)
@@ -249,7 +259,7 @@ class DSOApp(QtWidgets.QWidget):
             is_selected = self.result_table.selectionModel().isRowSelected(row, QtCore.QModelIndex())
             is_hovered  = (row == self.hovered_row)
 
-            # Manual
+            # ตรวจว่าคือ Manual หรือไม่ (ดูจาก data(UserRole) หรือข้อความ)
             is_manual = False
             if verif_col != -1:
                 verif_item = self.result_table.item(row, verif_col)
@@ -260,17 +270,22 @@ class DSOApp(QtWidgets.QWidget):
                     elif isinstance(verif_item.text(), str) and verif_item.text().strip().lower() == "manual":
                         is_manual = True
 
-            # ถ้าเลือกแถว → ใช้ "สีน้ำเงินของธีม" เสมอ (ทับ Manual/Hover)
+            # กำหนดพื้นหลัง "ฐาน" ของทั้งแถว
             if is_selected:
-                bg = sel_hex
+                base_bg = sel_hex
             else:
                 if is_manual:
-                    bg = Y_HOVER if is_hovered else Y_ROW
+                    base_bg = Y_HOVER if is_hovered else Y_ROW  # เหลืองอ่อน
                 else:
-                    bg = G_HOVER if is_hovered else "white"
+                    base_bg = G_HOVER if is_hovered else "white"
 
+            # ทาแต่ละเซลล์ในแถวนั้น
             for col in range(self.result_table.columnCount()):
-                paint_cell(row, col, bg)
+                cell_bg = base_bg
+                # คอลัมน์ Verification ใช้พื้นหลังของตนเอง (ถ้าไม่ได้ select แถว)
+                if (col == verif_col) and (not is_selected):
+                    cell_bg = V_BG if not is_manual else Y_ROW
+                paint_cell(row, col, cell_bg)
 
     def get_column_index(self, column_name):
         for col in range(self.result_table.columnCount()):
@@ -288,6 +303,60 @@ class DSOApp(QtWidgets.QWidget):
         pt = self._table_font_pt()
         family = self.result_table.font().family()
         return f'<div style="font-family:{family}; font-size:{pt}pt;">{cleaned}</div>'
+    
+    def _remark_pairs_to_html(self, text: str, inner_w: int, fm: QtGui.QFontMetrics) -> str:
+        esc = _html.escape
+        t = str(text or "").replace("\r", "\n").strip()
+        if not t:
+            return "-"
+
+        # จับคู่ทั่วไป "LEFT = RIGHT" (ยืดหยุ่น ครอบคลุมอักขระยุโรป)
+        PAIR_FULL = re.compile(r"\s*([^=]+?)\s*=\s*([^\n=]+)\s*$")
+
+        def fmt_pair(left: str, right: str) -> str:
+            left, right = left.strip(), right.strip()
+            one_line = f"{left} = {right}"
+            # ถ้าใกล้เต็มคอลัมน์แล้ว (≥92%) ให้ตัดขึ้นบรรทัดใหม่หลัง '='
+            if fm.horizontalAdvance(one_line) >= int(inner_w * 0.92):
+                return f"{esc(left)} =<br/>{esc(right)}"
+            return esc(one_line)
+
+        # กรณีมี \n อยู่แล้ว → ประมวลผลทีละบรรทัด
+        if "\n" in t:
+            lines = []
+            for line in t.split("\n"):
+                line = line.strip()
+                if not line:
+                    continue
+                m = PAIR_FULL.fullmatch(line)
+                lines.append(fmt_pair(*m.groups()) if m else esc(line))
+            return "<br/>".join(lines) if lines else "-"
+
+        # สตริงเดียว: อาจมีหลายคู่ในบรรทัดเดียว
+        pairs = [(m.group(1), m.group(2)) for m in re.finditer(r"([^=]+?)\s*=\s*([^\n=]+)", t)]
+        if len(pairs) >= 2:
+            return "<br/>".join(fmt_pair(l, r) for (l, r) in pairs)
+
+        m = PAIR_FULL.fullmatch(t)
+        if m:
+            return fmt_pair(m.group(1), m.group(2))
+        return esc(t)
+    
+    def _pairs_to_multiline_html(self, s: str) -> str:
+
+        t = str(s or "").replace("\r", "\n")
+        if "\n" in t:
+            return _html.escape(t).replace("\n", "<br/>")
+
+        # จับคู่ข้อความตัวพิมพ์ใหญ่ (รวมอักขระยุโรป) ตามด้วย " = " และชื่อภาษา
+        PAIR_RE = re.compile(
+            r"([A-Z0-9\u00C0-\u017F][A-Z0-9\s'’\-\u00C0-\u017F]+?\s*=\s*[A-Za-z\u00C0-\u017F]+)"
+        )
+        pairs = PAIR_RE.findall(t)
+        if len(pairs) >= 2:
+            return "<br/>".join(_html.escape(p.strip()) for p in pairs)
+
+        return _html.escape(t)
 
     def load_pdf(self):
         path, _ = QtWidgets.QFileDialog.getOpenFileName(self, "Select PDF Artwork", "", "PDF Files (*.pdf)")
@@ -389,9 +458,9 @@ class DSOApp(QtWidgets.QWidget):
         cols_to_fill = [c for c in df.columns if c not in symbol_cols_protect]
         df[cols_to_fill] = df[cols_to_fill].fillna("-")
 
-        preferred = ["Requirement", "Symbol/ Exact wording", "Specification", 
-                    "Package Panel", "Procedure", "Remark", "Found", "Match", 
-                    "Font Size", "Pages", "Note", "Verification"]
+        preferred = ["Verification", "Requirement", "Symbol/ Exact wording", "Specification", 
+                    "Found", "Match", "Font Size", "Pages", "Note", 
+                    "Package Panel", "Procedure", "Remark" ]
         
         # helper column ที่ไม่แสดงใน UI แต่ยังแสดงใน df_scr
         helper_names = {"remark url", "remark link"}
@@ -415,6 +484,29 @@ class DSOApp(QtWidgets.QWidget):
         self.result_table.setRowCount(len(df_ui))
         self.result_table.setColumnCount(len(df_ui.columns))
         self.result_table.setHorizontalHeaderLabels(df_ui.columns.tolist())
+
+        # ทำหัวคอลัมน์ทั้งหมดเป็นเทาอ่อน
+        self.result_table.horizontalHeader().setStyleSheet("""
+        QHeaderView::section {
+            background-color: #EAEAEA;   
+            color: black;
+            padding: 6px;
+            border: 0px;
+        }
+        QHeaderView::section:first {
+            background-color: #EEF3FF; 
+        }
+        """)
+
+        # Header "Verification" ให้เด่น
+        if "Verification" in df_ui.columns:
+            vcol = df_ui.columns.get_loc("Verification")
+            head_item = QtWidgets.QTableWidgetItem("Verification")
+            head_item.setForeground(QColor("black"))
+            head_item.setBackground(QColor("#F2F8F1")) 
+            head_item.setToolTip("Auto/Manual verification status")
+            self.result_table.setHorizontalHeaderItem(vcol, head_item)
+            self.result_table.setColumnWidth(vcol, 120)
 
         symbol_names = {"Symbol/  Exact wording", "Symbol/ Exact wording", "Symbol/Exact wording"}
         sym_col = None
@@ -450,7 +542,7 @@ class DSOApp(QtWidgets.QWidget):
         if "Procedure" in df_ui.columns:
             self.result_table.setColumnWidth(df_ui.columns.get_loc("Procedure"), equal_width)
         if "Remark" in df_ui.columns:
-            self.result_table.setColumnWidth(df_ui.columns.get_loc("Remark"), 280)
+            self.result_table.setColumnWidth(df_ui.columns.get_loc("Remark"), 340)
 
         header = self.result_table.horizontalHeader()
         for i in range(df_ui.shape[1]):
@@ -475,6 +567,24 @@ class DSOApp(QtWidgets.QWidget):
         # หลังจบลูปเติมแถว
         self.result_table.resizeRowsToContents()
 
+        # แต่งสีคอลัมน์ Verification ให้สแกนง่าย
+        if "Verification" in df_ui.columns:
+            vcol = df_ui.columns.get_loc("Verification")
+            for r in range(self.result_table.rowCount()):
+                it = self.result_table.item(r, vcol)
+                if not it:
+                    continue
+                txt = (it.text() or "").strip().lower()
+                if txt == "manual":
+                    it.setBackground(QColor("#FFF1B0")) 
+                    it.setForeground(QColor("#8A6D00"))
+                    it.setText("Manual")
+                else:
+                    it.setBackground(QColor("#E6F4EA")) 
+                    it.setForeground(QColor("#0E7C3F"))
+                    it.setText("Verified")
+                it.setTextAlignment(QtCore.Qt.AlignCenter)
+
         # autosize คอลัมน์ยาว
         sym_header = None
         for name in ("Symbol/  Exact wording", "Symbol/ Exact wording", "Symbol/Exact wording"):
@@ -484,7 +594,7 @@ class DSOApp(QtWidgets.QWidget):
         if sym_header:
             self._autosize_column_to_contents(sym_header, min_w=360, max_w=720)
         if "Remark" in df_ui.columns:
-            self._autosize_column_to_contents("Remark", min_w=260, max_w=560)
+            self._autosize_column_to_contents("Remark", min_w=340, max_w=560)
 
         # คำนวณความสูงใหม่หลังคอลัมน์กว้างขึ้น
         self.result_table.resizeRowsToContents()
@@ -777,7 +887,7 @@ class DSOApp(QtWidgets.QWidget):
                     url = str(row_src.get("Remark URL", "") or row_src.get("Remark Link", "") or "").strip()
                     txt = (str(value) if value is not None else "").strip()
 
-                    # ห่อด้วย container เพื่อควบคุม padding และติด event filter
+                    # container + layout
                     rwrap = QtWidgets.QWidget()
                     rlay = QtWidgets.QVBoxLayout(rwrap)
                     rlay.setContentsMargins(6, 2, 6, 2) 
@@ -789,21 +899,38 @@ class DSOApp(QtWidgets.QWidget):
                     lbl.setTextInteractionFlags(QtCore.Qt.TextBrowserInteraction)
                     lbl.setAlignment(QtCore.Qt.AlignHCenter | QtCore.Qt.AlignVCenter)
                     lbl.setWordWrap(True)
+                    lbl.linkActivated.connect(lambda u: QDesktopServices.openUrl(QUrl(u)))
                     lbl.setFont(self.result_table.font())
+                    lbl.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Preferred)
 
-                    if url and txt and txt not in ["-", "nan", "None"]:
-                        content_html = f'<a href="{url}">{QtCore.QCoreApplication.translate("", txt)}</a>'
+                    # ให้กว้างเท่าคอลัมน์จริง เพื่อไม่ให้บีบ
+                    col_w   = self.result_table.columnWidth(col_idx)
+                    inner_w = max(40, col_w - 12)
+                    fm = lbl.fontMetrics()
+                    
+                    # สร้าง HTML ตามกติกา (ตัด/ไม่ตัดตามความกว้าง)
+                    base_html = self._remark_pairs_to_html(txt, inner_w, fm)
+
+                    if url and base_html and base_html not in ["-", "nan", "None"]:
+                        content_html = f'<a href="{url}">{base_html}</a>'
                     elif url and not txt:
-                        content_html = f'<a href="{url}">{url}</a>'
+                        content_html = f'<a href="{url}">{_html.escape(url)}</a>'
                     else:
-                        def linkify(s: str) -> str:
-                            if not s:
-                                return "-"
-                            return re.sub(r'(https?://[^\s]+)', r'<a href="\1">\1</a>', s)
-                        content_html = linkify(txt) if txt else "-"
+                        content_html = re.sub(r'(?P<u>https?://[^\s<]+)', r'<a href="\g<u>">\g<u></a>', base_html)
 
+                    # บังคับให้ใช้ฟอนต์ของตาราง
                     lbl.setText(self._wrap_html_with_table_font(content_html))
-                    rlay.addWidget(lbl, 0, QtCore.Qt.AlignCenter)
+
+                    lbl.setMinimumWidth(inner_w)
+                    lbl.setMaximumWidth(inner_w)
+                    plain = re.sub(r"<[^>]+>", "", content_html or "")
+                    lbl.setWordWrap(fm.horizontalAdvance(plain) > inner_w if plain else True)
+
+                    # เผื่อบางสภาพแวดล้อม openExternalLinks ไม่ยิง ให้จับ signal สำรอง
+                    lbl.linkActivated.connect(lambda u: QDesktopServices.openUrl(QUrl(u)))
+                    
+                    # วางลง layout (ไม่ใส่ AlignCenter ที่ layout เพื่อให้ขยายเต็มความกว้าง)
+                    rlay.addWidget(lbl)
                     self.result_table.setCellWidget(row_idx, col_idx, rwrap)
                     self._attach_row_select(rwrap, row_idx)
                     continue
@@ -816,7 +943,7 @@ class DSOApp(QtWidgets.QWidget):
 
                 # Alignment: Requirement = ซ้าย/หนา, อื่นๆ = กึ่งกลาง
                 if header == "Requirement":
-                    item.setTextAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
+                    item.setTextAlignment(QtCore.Qt.AlignCenter | QtCore.Qt.AlignVCenter)
                     f = item.font(); f.setBold(True); item.setFont(f)
                 else:
                     item.setTextAlignment(QtCore.Qt.AlignHCenter | QtCore.Qt.AlignVCenter)
@@ -847,7 +974,8 @@ class DSOApp(QtWidgets.QWidget):
         header_item = self.result_table.horizontalHeaderItem(logicalIndex)
         if not header_item:
             return
-        if header_item.text().strip().lower() != "symbol/ exact wording":
+        name = header_item.text().strip().lower()
+        if name not in ("symbol/ exact wording", "symbol/  exact wording", "symbol/exact wording", "remark"):
             return
 
         col_idx = logicalIndex
@@ -860,32 +988,32 @@ class DSOApp(QtWidgets.QWidget):
                 continue
 
             labels = cell.findChildren(QtWidgets.QLabel)
-
             for lbl in labels:
-                txt_html = lbl.text() if hasattr(lbl, "text") else ""
-                if not isinstance(txt_html, str) or "<img" in txt_html.lower():
+                html = lbl.text() if hasattr(lbl, "text") else ""
+                if not isinstance(html, str):
                     continue
-                txt_plain = re.sub(r"<[^>]+>", "", txt_html)
+
+                # รีสเกลข้อความ (ทั้ง Symbol และ Remark)
+                txt_plain = re.sub(r"<[^>]+>", "", html)
                 fm = lbl.fontMetrics()
                 lbl.setMinimumWidth(inner_w)
                 lbl.setMaximumWidth(inner_w)
+                lbl.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Preferred)
                 need_wrap = fm.horizontalAdvance(txt_plain) > inner_w if txt_plain else True
                 lbl.setWordWrap(need_wrap)
 
-                # รีสเกลรูปในคอลัมน์นี้ให้พอดีกับความกว้างใหม่
-                for img_lbl in labels:
-                    img_path = img_lbl.property("img_path") 
-                    if not img_path:
-                        continue
-
-                    pm_orig = getattr(self, "_image_cache", {}).get(img_path)
-                    if not isinstance(pm_orig, QtGui.QPixmap) or pm_orig.isNull():
-                        continue
-
-                    max_img_w = max(40, col_w - 2 * IMG_SIDE_PADDING)
-                    is_logo = bool(img_lbl.property("is_logo"))
-                    target_w = min(LOGO_MAX_WIDTH_PX, max_img_w) if is_logo else int(max_img_w * 0.98)
-                    img_lbl.setPixmap(pm_orig.scaledToWidth(max(1, target_w), QtCore.Qt.SmoothTransformation))
+            # รีสเกลรูป (มีเฉพาะคอลัมน์ Symbol/…)
+            for img_lbl in labels:
+                img_path = img_lbl.property("img_path")
+                if not img_path:
+                    continue
+                pm_orig = getattr(self, "_image_cache", {}).get(img_path)
+                if not isinstance(pm_orig, QtGui.QPixmap) or pm_orig.isNull():
+                    continue
+                max_img_w = max(40, col_w - 2 * IMG_SIDE_PADDING)
+                is_logo   = bool(img_lbl.property("is_logo"))
+                target_w  = min(LOGO_MAX_WIDTH_PX, max_img_w) if is_logo else int(max_img_w * 0.98)
+                img_lbl.setPixmap(pm_orig.scaledToWidth(max(1, target_w), QtCore.Qt.SmoothTransformation))
 
     def export_results(self):
         if self.result_df is None or self.result_df.empty:
