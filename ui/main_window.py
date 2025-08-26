@@ -304,6 +304,39 @@ class DSOApp(QtWidgets.QWidget):
         family = self.result_table.font().family()
         return f'<div style="font-family:{family}; font-size:{pt}pt;">{cleaned}</div>'
     
+    def _wrap_all_as_link(self, inner_html: str, url: str) -> str:
+        if not url:
+            return inner_html
+        u = url.strip()
+        if u.lower().startswith("www."):
+            u = "http://" + u
+        return (
+            f'<a href="{_html.escape(u)}" '
+            f'style="color:#1a73e8; text-decoration: underline;">{inner_html}</a>'
+        )
+    
+    def _linkify_plain_urls(self, html_text: str) -> str:
+        def anchor(u: str, label: str = None) -> str:
+            if not label:
+                label = u
+            return (
+                f'<a href="{u}" '
+                f'style="color:#1a73e8; text-decoration: underline;">{label}</a>'
+            )
+
+        html_text = re.sub(
+            r'(?<!href=")(?P<url>https?://[^\s<>"\')]+)',
+            lambda m: anchor(m.group("url")),
+            html_text,
+        )
+
+        html_text = re.sub(
+            r'(?<!href=")(?P<url>www\.[^\s<>"\')]+)',
+            lambda m: anchor("http://" + m.group("url"), m.group("url")),
+            html_text,
+        )
+        return html_text
+    
     def _remark_pairs_to_html(self, text: str, inner_w: int, fm: QtGui.QFontMetrics) -> str:
         esc = _html.escape
         t = str(text or "").replace("\r", "\n").strip()
@@ -911,12 +944,22 @@ class DSOApp(QtWidgets.QWidget):
                     # สร้าง HTML ตามกติกา (ตัด/ไม่ตัดตามความกว้าง)
                     base_html = self._remark_pairs_to_html(txt, inner_w, fm)
 
-                    if url and base_html and base_html not in ["-", "nan", "None"]:
-                        content_html = f'<a href="{url}">{base_html}</a>'
-                    elif url and not txt:
-                        content_html = f'<a href="{url}">{_html.escape(url)}</a>'
+                    detected_url = None
+                    if url:
+                        detected_url = url.strip()
                     else:
-                        content_html = re.sub(r'(?P<u>https?://[^\s<]+)', r'<a href="\g<u>">\g<u></a>', base_html)
+                        m = re.search(r'(https?://[^\s<>"\')]+)', base_html)
+                        if not m:
+                            m = re.search(r'(www\.[^\s<>"\')]+)', base_html)
+                            if m:
+                                detected_url = "http://" + m.group(1)
+                        else:
+                            detected_url = m.group(1)
+
+                    if detected_url:
+                        content_html = self._wrap_all_as_link(base_html, detected_url)
+                    else:
+                        content_html = base_html 
 
                     # บังคับให้ใช้ฟอนต์ของตาราง
                     lbl.setText(self._wrap_html_with_table_font(content_html))

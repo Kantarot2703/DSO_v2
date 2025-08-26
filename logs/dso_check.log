@@ -1,45 +1,45 @@
-2025-08-26 09:53:25,325 | INFO | root | 📂 PDF filename: 30782_MB2025_BASIC C_MIX 11_NEW,CARRY F_4LB_A1_review.pdf
-2025-08-26 09:53:25,325 | INFO | root | 🧠 Part codes detected: ['4LB']
-2025-08-26 09:53:25,325 | INFO | root | 📄 Sheet names: ['DOM', '4LB']
-2025-08-26 09:53:25,325 | INFO | root | ✅ Found matching sheet: 4LB
-2025-08-26 09:53:25,325 | INFO | root | 🧾 Header chosen at row 2 | columns: ['Check list', 'Requirement', 'Symbol/  Exact wording', 'Specification', 'Package Panel', 'Procedure']...
-2025-08-26 09:53:25,325 | INFO | root | 🧾 Columns found in sheet: ['Check list', 'Requirement', 'Symbol/  Exact wording', 'Specification', 'Package Panel', 'Procedure', 'Remark', 'Image Match', 'Image Path']
-2025-08-26 09:53:25,341 | INFO | root | 🛟 Fallback columns → Term: Symbol/  Exact wording, Language: None, Spec: Requirement
-2025-08-26 09:53:25,341 | INFO | root | 🔎 ใช้คอลัมน์ Term: Symbol/  Exact wording, Language: None, Spec: Requirement
-2025-08-26 09:53:32,070 | INFO | root | [underline] approx_start_row=3, real_start_row=4
-2025-08-26 09:53:33,272 | INFO | checklist_loader | 📄 Pages considered: 17 (real pages: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 14, 15, 16, 17, 18])
-2025-08-26 09:53:33,273 | INFO | checklist_loader | 📄 Artwork-like pages considered: 17 (real pages: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 14, 15, 16, 17, 18])
-2025-08-26 09:53:33,287 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'Product’s common or generic name
+2025-08-26 10:10:53,351 | INFO | root | 📂 PDF filename: 30782_MB2025_BASIC C_MIX 11_NEW,CARRY F_4LB_A1_review.pdf
+2025-08-26 10:10:53,351 | INFO | root | 🧠 Part codes detected: ['4LB']
+2025-08-26 10:10:53,352 | INFO | root | 📄 Sheet names: ['DOM', '4LB']
+2025-08-26 10:10:53,352 | INFO | root | ✅ Found matching sheet: 4LB
+2025-08-26 10:10:53,354 | INFO | root | 🧾 Header chosen at row 2 | columns: ['Check list', 'Requirement', 'Symbol/  Exact wording', 'Specification', 'Package Panel', 'Procedure']...
+2025-08-26 10:10:53,355 | INFO | root | 🧾 Columns found in sheet: ['Check list', 'Requirement', 'Symbol/  Exact wording', 'Specification', 'Package Panel', 'Procedure', 'Remark', 'Image Match', 'Image Path']
+2025-08-26 10:10:53,355 | INFO | root | 🛟 Fallback columns → Term: Symbol/  Exact wording, Language: None, Spec: Requirement
+2025-08-26 10:10:53,355 | INFO | root | 🔎 ใช้คอลัมน์ Term: Symbol/  Exact wording, Language: None, Spec: Requirement
+2025-08-26 10:10:55,560 | INFO | root | [underline] approx_start_row=3, real_start_row=4
+2025-08-26 10:10:57,766 | INFO | checklist_loader | 📄 Pages considered: 17 (real pages: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 14, 15, 16, 17, 18])
+2025-08-26 10:10:57,766 | INFO | checklist_loader | 📄 Artwork-like pages considered: 17 (real pages: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 14, 15, 16, 17, 18])
+2025-08-26 10:10:57,780 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'Product’s common or generic name
 (Canada)' | Spec: '≥ 1.6 mm.' → Manual verification
-2025-08-26 09:53:33,328 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'Space for Date code
+2025-08-26 10:10:57,818 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'Space for Date code
 (All markets)' | Spec: 'Must not cover any text and illustration' → Manual verification
-2025-08-26 09:53:33,329 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'Lion mark
+2025-08-26 10:10:57,818 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'Lion mark
 (All markets)' | Spec: '≥ 5 mm.' → Manual verification
-2025-08-26 09:53:33,329 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'CE mark
+2025-08-26 10:10:57,819 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'CE mark
 (All markets)' | Spec: '≥ 5 mm.' → Manual verification
-2025-08-26 09:53:33,330 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'UKCA mark
+2025-08-26 10:10:57,819 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'UKCA mark
 (All markets)' | Spec: '≥ 5 mm.' → Manual verification
-2025-08-26 09:53:33,330 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'MC  mark
+2025-08-26 10:10:57,819 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'MC  mark
 (All markets)' | Spec: '≥ 5x5 mm.
 (Exclude numbers under MC )' → Manual verification
-2025-08-26 09:53:33,330 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'CIB: Consumer Information Block
+2025-08-26 10:10:57,820 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'CIB: Consumer Information Block
 (All markets)' | Spec: 'must be located near the legal copy' → Manual verification
-2025-08-26 09:53:33,331 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'Argentina logo
+2025-08-26 10:10:57,820 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'Argentina logo
 (Argentina)' | Spec: '≥ 12. 5 mm.' → Manual verification
-2025-08-26 09:53:33,331 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'Brazilian logo
+2025-08-26 10:10:57,821 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'Brazilian logo
 (Brazil)' | Spec: '≥ 20 mm.
 ( largest panel is < 278.75 cm2)' → Manual verification
-2025-08-26 09:53:33,331 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'Waste Sorting Information
+2025-08-26 10:10:57,821 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'Waste Sorting Information
 (Italy)' | Spec: 'The letter abbreviation and number code ≥ 1.2 mm.' → Manual verification
-2025-08-26 09:53:33,331 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'Waste Sorting Information
+2025-08-26 10:10:57,821 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'Waste Sorting Information
 (France)' | Spec: 'The "FR" tab font must be “ Flama condensed bold”  and text height must be ≥ 1.26 mm and all caps.' → Manual verification
-2025-08-26 09:53:33,332 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'Waste Sorting Information
+2025-08-26 10:10:57,822 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'Waste Sorting Information
 (France)' | Spec: 'The Triman logo height must be ≥ 10 mm.
  when space is limited can be used minimum size 6 mm.' → Manual verification
-2025-08-26 09:53:33,332 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'Sorting & Donation Label
+2025-08-26 10:10:57,822 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'Sorting & Donation Label
 (France)' | Spec: 'Standard Dimensions: The Triman logo height must be ≥ 10 mm.
 Compact Dimensions: The Triman logo height must be ≥ 6 mm.' → Manual verification
-2025-08-26 09:53:33,332 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'Sorting Symbols
+2025-08-26 10:10:57,823 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'Sorting Symbols
 (Spain)' | Spec: 'Single Material;
 Limited space: The height of symbol must be ≥ 8 mm
 Available space: The height of symbol must be ≥ 10 mm
@@ -47,9 +47,9 @@ Available space: The height of symbol must be ≥ 10 mm
 Multi-Material;
 Limited space: The height of symbol must be ≥ 8 mm
 Available space: The height of symbol must be ≥ 10 mm' → Manual verification
-2025-08-26 09:53:33,333 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'Warning statement: SPW
+2025-08-26 10:10:57,823 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'Warning statement: SPW
 (USA)' | Spec: 'Size as remark column' → Manual verification
-2025-08-26 09:53:33,333 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'International
+2025-08-26 10:10:57,824 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'International
  warning statement: SPW
 (All markets)' | Spec: 'Packages area of the largest panel is < 278.75 cm² 
 
@@ -59,7 +59,7 @@ The cautionary statements following the signal word must be in all uppercase and
 
 Mercosur requirement : The signal words "ADVERTENCIA"  must be in uppercase and ≥ 2 mm.
 The cautionary statements following the signal word must be ≥ 1.5 mm and can be in uppercase or lowercase.' → Manual verification
-2025-08-26 09:53:33,334 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'International
+2025-08-26 10:10:57,824 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'International
  warning statement: SPG
 (All markets)' | Spec: 'Packages area of the largest panel is < 278.75 cm² 
 
@@ -69,18 +69,18 @@ The cautionary statements following the signal word must be in all uppercase and
 
 Mercosur requirement : The signal words "ADVERTENCIA"  must be in uppercase and ≥ 2 mm.
 The cautionary statements following the signal word must be ≥ 1.5 mm and can be in uppercase or lowercase.' → Manual verification
-2025-08-26 09:53:33,334 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'UPC requirement
+2025-08-26 10:10:57,825 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'UPC requirement
 (All markets)' | Spec: 'Size of UPC Barcode depend on area panel' → Manual verification
-2025-08-26 09:53:33,334 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'List of content : Text
+2025-08-26 10:10:57,825 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'List of content : Text
 (All market)' | Spec: 'All markets
 - open package = no need list of content
 - close package = need list of content' → Manual verification
-2025-08-26 09:53:33,335 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'List of content : Text
+2025-08-26 10:10:57,826 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'List of content : Text
 (Brazil)' | Spec: 'Brazil : The word “CONTEÚDO:” and the numerical portion (quantity) of the list of contents must meet the text height requirement per Table' → Manual verification
-2025-08-26 09:53:33,335 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'List of content : Text
+2025-08-26 10:10:57,826 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'List of content : Text
 (Canada)' | Spec: 'Canada : The text ≥ 1.6 mm.
 The number must be in bold and must meet the height requirement per table as below.' → Manual verification
-2025-08-26 09:53:33,335 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'List of content : 
+2025-08-26 10:10:57,826 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'List of content : 
 pictorial
 (All markets)' | Spec: 'Must have text above picture at least 4 languages (English, French, Brazilian Portuguese, Russian)
 
@@ -89,5 +89,5 @@ The word “CONTEÚDO:” and the numerical portion (quantity) of the list of co
 
 Canada : 
 Any additional languages on the package must not be displayed with greater prominence than the French. So the translation of French must equal Brazilian Portuguese.' → Manual verification
-2025-08-26 09:53:33,336 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'Instruction of Play function feature
+2025-08-26 10:10:57,827 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'Instruction of Play function feature
 (All markets)' | Spec: '-' → Manual verification
