@@ -853,13 +853,40 @@ def start_check(df_checklist, extracted_text_list):
         for c in det_codes:
             code_pages_map[c].add(real_no)
 
-    # --- helper: แปลงรายชื่อหน้า → "All Pages" หรือ list หน้าที่เป็น artwork เท่านั้น
+    # --- helper แปลงรายชื่อหน้า All Pages 
     def _format_pages_for_output(found_pages):
-        artwork_set = set(page_mapping.values())  # ใช้เฉพาะหน้า artwork จริง
+        artwork_set = set(page_mapping.values())  
         p = sorted(set(int(x) for x in (found_pages or [])) & artwork_set)
         if p and set(p) == artwork_set:
             return "All Pages"
         return ", ".join(str(x) for x in p) if p else "-"
+    
+    # --- helper: log หลักฐานการตรวจ สำหรับ term หนึ่งแถว ---
+    def _log_evidence(term_text, spec_text, found_pages_list, matched_items, thr_mm, max_size_mm, page_str):
+        pdf_hits = sum(1 for i in matched_items if (i.get("source") or "pdf").lower() != "ocr")
+        ocr_hits = sum(1 for i in matched_items if (i.get("source") or "").lower() == "ocr")
+        ul_hits  = sum(1 for i in matched_items if bool(i.get("underline")))
+        bd_hits  = sum(1 for i in matched_items if bool(i.get("bold")))
+
+        logger.info("🔎 [VERIFY] Term=%r | Spec=%r", term_text, spec_text or "-")
+        logger.info("    ↳ Pages(evidence)=%s | Items=%d (PDF=%d, OCR=%d, Underline=%d, Bold=%d)",
+                    page_str, len(matched_items), pdf_hits, ocr_hits, ul_hits, bd_hits)
+
+        if thr_mm is not None:
+            if max_size_mm is None:
+                logger.info("    [FONT] Spec ≥ %.2f mm | observed: - (no measurable item)", float(thr_mm))
+            else:
+                ok = (max_size_mm >= thr_mm)
+                logger.info("    [FONT] Spec ≥ %.2f mm | observed: %.2f mm → %s",
+                            float(thr_mm), float(max_size_mm), "PASS" if ok else "FAIL")
+
+        for i, it in enumerate(matched_items[:3]):
+            logger.info("    [HIT#%d] text=%r | src=%s | underline=%s | bold=%s | size=%.2f mm",
+                        i+1,
+                        (it.get('text') or "")[:80],
+                        (it.get('source') or "pdf"),
+                        bool(it.get('underline')), bool(it.get('bold')),
+                        _pick_size_mm(it))
 
     for idx, row in df_checklist.iterrows():
         requirement = str(row.get("Requirement", "")).strip()
@@ -1142,6 +1169,11 @@ def start_check(df_checklist, extracted_text_list):
                             break
                 if added is not None:
                     matched_items.append(added)
+                    logger.info("    [SALVAGE] added underline evidence from page %s: %r (src=%s, size=%.2f mm)",
+                        page_no,
+                        (added.get("text") or "")[:80],
+                        (added.get("source") or "pdf"),
+                        _pick_size_mm(added))
 
             # คำนวณใหม่หลัง salvage
             bolds       = [bool(i.get("bold", False)) for i in matched_items]
@@ -1218,6 +1250,17 @@ def start_check(df_checklist, extracted_text_list):
 
             # ---- Notes ----
             note_str = ", ".join(_dedup_notes(notes)) if notes else "-"
+
+            # --- LOG หลักฐานการตรวจ (หลักฐานจาก PDF/OCR จริง) ---
+            _log_evidence(
+                term_text=term,
+                spec_text=spec,
+                found_pages_list=found_pages_all,
+                matched_items=matched_items,
+                thr_mm=thr_mm,
+                max_size_mm=max_size_mm,
+                page_str=page_str
+            )
 
             grouped[(requirement, spec, "Verified")].append({
                 "Term": term,
