@@ -749,13 +749,39 @@ def start_check(df_checklist, extracted_text_list):
         "สำรองพื้นที่รหัสวันที่", "เครื่องหมายรับรอง"
     ]
 
+    # ใช้ Part No. เป็นเกณฑ์หลักในการคัดหน้า artwork 
+    PARTNO_RE = re.compile(r"\b[A-Z]{3}\d{2}\b")
+
+    doc_has_any_partno = False
+    for _page in extracted_text_list:
+        _txt = " ".join((it.get("text") or "") for it in _page).upper()
+        if PARTNO_RE.search(_txt):
+            doc_has_any_partno = True
+            break
+
     # คัดหน้า artwork เท่านั้น (ตัดหน้าปก/หน้าไม่ใช่งานศิลป์ออก)
     def is_artwork_page(page_items):
-        if len(page_items) < 10:
+        if not page_items:
             return False
-        for it in page_items:
-            if isinstance(it, dict) and _pick_size_mm(it) >= 1.6:
-                return True
+
+        page_text = " ".join((it.get("text") or "") for it in page_items).upper()
+        if PARTNO_RE.search(page_text):
+            return True
+
+        if doc_has_any_partno:
+            return False
+
+        pdf_items = [it for it in page_items if (it.get("source") or "pdf").lower() != "ocr"]
+        ocr_items = [it for it in page_items if (it.get("source") or "").lower() == "ocr"]
+
+        def _has_big(items):
+            return any((_pick_size_mm(it) >= 1.6) for it in items if isinstance(it, dict))
+
+        if len(pdf_items) >= 20 and _has_big(pdf_items):
+            return True
+        if len(pdf_items) < 5 and len(ocr_items) >= 12 and (_has_big(ocr_items) or _has_big(page_items)):
+            return True
+
         return False
 
     artwork_pages = []
@@ -783,6 +809,57 @@ def start_check(df_checklist, extracted_text_list):
             text_norm = normalize_text(item.get("text", ""))
             page_number = page_mapping[artwork_index + 1]
             all_texts.append((text_norm, page_number, item))
+
+    # ---------- Language CODE from PDF CONTENT ----------
+    def _tokens_upper(s: str) -> set:
+        return {t for t in re.split(r"[^A-Z0-9_]+", (s or "").upper()) if t}
+
+    def _detect_lang_codes_in_text(text: str) -> set:
+        tokens = _tokens_upper(text)
+        codes = set()
+
+        for code in ALLOWED_PART_CODES:
+            if code in tokens:
+                codes.add(code)
+
+        for m in re.findall(r"\b([2-9]LB)\b", (text or "").upper()):
+            codes.add(m)
+        return codes
+
+    def _compact_pages(nums) -> str:
+        nums = sorted(set(int(n) for n in nums))
+        if not nums:
+            return "-"
+        out = []
+        start = prev = nums[0]
+        for n in nums[1:]:
+            if n == prev + 1:
+                prev = n
+            else:
+                out.append(str(start) if start == prev else f"{start}-{prev}")
+                start = prev = n
+        out.append(str(start) if start == prev else f"{start}-{prev}")
+        return ", ".join(out)
+
+    # Map: ภาพรวม code ต่อ "เลขหน้าใน PDF จริง" (เฉพาะหน้า artwork)
+    page_langcodes = {}                 
+    code_pages_map = defaultdict(set)   
+
+    for artwork_index, page_items in enumerate(artwork_pages):
+        real_no = page_mapping[artwork_index + 1]      # เลขหน้าใน PDF จริง
+        whole_text = " ".join([(it.get("text") or "") for it in page_items])
+        det_codes = _detect_lang_codes_in_text(whole_text)
+        page_langcodes[real_no] = det_codes
+        for c in det_codes:
+            code_pages_map[c].add(real_no)
+
+    # --- helper: แปลงรายชื่อหน้า → "All Pages" หรือ list หน้าที่เป็น artwork เท่านั้น
+    def _format_pages_for_output(found_pages):
+        artwork_set = set(page_mapping.values())  # ใช้เฉพาะหน้า artwork จริง
+        p = sorted(set(int(x) for x in (found_pages or [])) & artwork_set)
+        if p and set(p) == artwork_set:
+            return "All Pages"
+        return ", ".join(str(x) for x in p) if p else "-"
 
     for idx, row in df_checklist.iterrows():
         requirement = str(row.get("Requirement", "")).strip()
@@ -924,7 +1001,7 @@ def start_check(df_checklist, extracted_text_list):
                     "Procedure": procedure,
                     "__Term_HTML__": row.get("__Term_HTML__", ""),
                     "Image_Groups_Resolved": row.get("Image_Groups_Resolved", row.get("Image_Groups", [])),
-                    })
+                })
             continue
 
         STOPWORDS = {"in","en","na","de","la","el","em","da","do","di","du","of","and","y","et","the","a","an"}
@@ -980,7 +1057,10 @@ def start_check(df_checklist, extracted_text_list):
         for term in term_lines:
             variants = _split_term_variants(term)
 
-            # เลือก variant ที่ "จับได้ดีที่สุด"
+            # เก็บ union ของหน้าที่พบ จาก "ทุก variant"
+            union_pages = set()
+
+            # เลือก variant ที่ "จับได้ดีที่สุด" (คง logic เดิม)
             best = {"items": [], "pages": [], "variant": ""}
             best_score = -1
             ul_keys    = ("underline", "ขีดเส้นใต้")
@@ -989,6 +1069,9 @@ def start_check(df_checklist, extracted_text_list):
             for v in variants:
                 v_norm = normalize_text(v)
                 items, pages = _match_items_for_variant(v_norm, all_texts)
+
+                # สะสมหน้าจากทุก variant
+                union_pages.update(pages)
 
                 score = len(items)
                 if _contains_any(spec_lower, ul_keys):
@@ -1000,15 +1083,18 @@ def start_check(df_checklist, extracted_text_list):
                     best_score = score
                     best = {"items": items, "pages": pages, "variant": v}
 
+            # ใช้ best สำหรับตรวจรูปแบบ/ขนาดตัวอักษร
             matched_items = best["items"]
-            found_pages   = best["pages"]
 
-            found_flag   = "✅ Found" if found_pages else "❌ Not Found"
+            # แต่ "การรายงานหน้า" ให้ใช้ union ของทุก variant
+            found_pages_all = sorted(set(union_pages))
+
+            found_flag   = "✅ Found" if found_pages_all else "❌ Not Found"
             match_result = "✔"
             notes        = []
 
             # ใส่เหตุผลเมื่อไม่พบ
-            if not found_pages:
+            if not found_pages_all:
                 notes.append("Not found on artwork pages")
                 if bool(row.get("_HasImage", False)):
                     notes.append("Text may be image-only")
@@ -1022,10 +1108,64 @@ def start_check(df_checklist, extracted_text_list):
             bolds       = [bool(i.get("bold", False)) for i in matched_items]
             underlines  = [bool(i.get("underline", False)) for i in matched_items]
             sizes_mm    = [_pick_size_mm(i) for i in matched_items]
-            max_size_mm = max(sizes_mm) if sizes_mm else None  
+            max_size_mm = max(sizes_mm) if sizes_mm else None
+            
+            # ---------- SALVAGE สำหรับสเปก Underline ----------
+            underline_present = any(bool(i.get("underline", False)) for i in matched_items)
+
+            if _contains_any(spec_lower, ("underline", "ขีดเส้นใต้")) and (not underline_present) and found_pages_all:
+                under_tokens = set()
+                try:
+                    html_src = str(row.get("__Term_HTML__", "") or "")
+                    under_frags = _extract_underlined_substrings(html_src)
+                    for frag in under_frags:
+                        v_norm = normalize_text(frag)
+                        under_tokens.update(re.findall(r"[a-z0-9]+(?:-[a-z0-9]+)?", v_norm))
+                except Exception:
+                    pass
+
+                # ถ้าไม่มี <u>…</u> ใน Excel → fallback เป็น token ของทุก variant
+                if not under_tokens:
+                    for v in variants:
+                        v_norm = normalize_text(v)
+                        under_tokens.update(re.findall(r"[a-z0-9]+(?:-[a-z0-9]+)?", v_norm))
+
+                STOPWORDS = {"in","en","na","de","la","el","em","da","do","di","du","of","and","y","et","the","a","an"}
+                under_tokens = {t for t in under_tokens if len(t) >= 2 and t not in STOPWORDS}
+
+                # หาหลักฐานบนหน้าใดก็ได้ที่พบ requirement มี "คำใต้เส้น" ที่ตรงกับ under_tokens
+                added = None
+                for text_norm, page_no, item in all_texts:
+                    if page_no in found_pages_all and bool(item.get("underline")):
+                        if (not under_tokens) or any(tok in text_norm for tok in under_tokens):
+                            added = item
+                            break
+                if added is not None:
+                    matched_items.append(added)
+
+            # คำนวณใหม่หลัง salvage
+            bolds       = [bool(i.get("bold", False)) for i in matched_items]
+            underlines  = [bool(i.get("underline", False)) for i in matched_items]
+            sizes_mm    = [_pick_size_mm(i) for i in matched_items]
+            max_size_mm = max(sizes_mm) if sizes_mm else None
+            underline_present = any(underlines)
+
+            if _contains_any(spec_lower, ("underline", "ขีดเส้นใต้")) and (not underline_present) and found_pages_all:
+                token_set = set()
+                for v in variants:
+                    v_norm = normalize_text(v)
+                    token_set.update(re.findall(r"[a-z0-9]+(?:-[a-z0-9]+)?", v_norm))
+                token_set = {t for t in token_set if len(t) >= 2 and t not in STOPWORDS}
+
+                for text_norm, page_no, item in all_texts:
+                    if page_no in found_pages_all and bool(item.get("underline")):
+                        if (not token_set) or any(tok in text_norm for tok in token_set):
+                            underline_present = True
+                            matched_items.append(item) 
+                            break
 
             # ---- Bold ----
-            if found_pages and matched_items and spec != "-":
+            if found_pages_all and matched_items and spec != "-":
                 if _contains_any(spec_lower, ("bold", "ตัวหนา")) and not all(bolds):
                     match_result = "❌"
                     notes.append("Not Bold")
@@ -1034,12 +1174,10 @@ def start_check(df_checklist, extracted_text_list):
             underline_present = any(underlines)
             if _contains_any(spec_lower, ("no underline", "ไม่มีขีดเส้นใต้")):
                 if underline_present:
-                    match_result = "❌"
-                    notes.append("Underline must be absent")
+                    match_result = "❌"; notes.append("Underline must be absent")
             elif _contains_any(spec_lower, ("underline", "ขีดเส้นใต้")):
                 if not underline_present:
-                    match_result = "❌"
-                    notes.append("Underline Missing")
+                    match_result = "❌"; notes.append("Underline Missing")
 
             # ---- All Caps ----
             if _contains_any(spec_lower, ("all caps", "ตัวพิมพ์ใหญ่ทั้งหมด", "ตัวใหญทั้งหมด", "พิมพ์ใหญ่ทั้งหมด")):
@@ -1047,7 +1185,7 @@ def start_check(df_checklist, extracted_text_list):
                     match_result = "❌"
                     notes.append("Not All Caps")
 
-            # ---- Font size ----  (อย่ารายงาน 0.0 mm เมื่อไม่มี item ให้วัด)
+            # ---- Font size ----  
             thr_mm = _parse_threshold_to_mm(spec_lower)
             font_size_str = "-"
             if thr_mm is not None:
@@ -1059,14 +1197,24 @@ def start_check(df_checklist, extracted_text_list):
                     else:
                         font_size_str = "✔"
                 else:
-                    # ไม่มีข้อความให้วัดขนาดฟอนต์
                     notes.append("No measurable text for font size")
 
-            # ---- Pages ----
-            pages = sorted(set(found_pages))
-            all_pages_nums = sorted(set(p for _, p, _ in all_texts))  # (ควรเป็นหน้า artwork เท่านั้น)
-            page_str = "All Pages" if pages and set(pages) == set(all_pages_nums) \
-                    else (", ".join(str(p) for p in pages) if pages else "-")
+            # ---- Pages ---- 
+            page_str = _format_pages_for_output(found_pages_all)
+
+            is_lang_row = (
+                ("language code" in req_norm) or ("lang code" in req_norm) or ("ภาษา" in req_norm)
+                or ("language code" in spec_norm) or ("lang code" in spec_norm) or ("ภาษา" in spec_norm)
+            )
+
+            expected_codes = set()
+            for _src in (term_lines or []):
+                expected_codes |= _detect_lang_codes_in_text(_src)
+            expected_codes |= _detect_lang_codes_in_text(spec)
+
+            detected_all = set()
+            for _p, _codes in (page_langcodes or {}).items():
+                detected_all |= (_codes or set())
 
             # ---- Notes ----
             note_str = ", ".join(_dedup_notes(notes)) if notes else "-"
