@@ -26,14 +26,14 @@ class _PdfWorker(QtCore.QThread):
         self.path = path
     def run(self):
         try:
-            pages = extract_text_by_page(self.path)
+            pages = extract_text_by_page(self.path, enable_ocr=True, ocr_only_suspect_pages=False)
             infos = extract_product_info_by_page(pages)
             self.finished.emit(pages, infos)
         except Exception as e:
             self.error.emit(str(e))
 
 class _ExcelWorker(QtCore.QThread):
-    finished = QtCore.pyqtSignal(object)       # DataFrame
+    finished = QtCore.pyqtSignal(object)     
     error = QtCore.pyqtSignal(str)
     def __init__(self, path: str, pdf_basename: str):
         super().__init__()

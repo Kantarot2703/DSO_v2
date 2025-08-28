@@ -253,16 +253,23 @@ def extract_text_by_page(pdf_path, enable_ocr=True, ocr_lang="eng+tha", ocr_only
             blocks = page.get_text("dict")["blocks"]
 
             raw_spans = []
+            line_groups = []
+
             for block in blocks:
                 if "lines" not in block:
                     continue
+
                 for line in block["lines"]:
                     if "spans" not in line:
                         continue
+
+                    __line_indices = []
+
                     for span in line["spans"]:
                         text = (span.get("text") or "").strip()
                         if not text:
                             continue
+
                         size_pt  = float(span.get("size", 0) or 0)
                         size_mm  = _pt_to_mm(size_pt)
                         fontname = span.get("font", "") or ""
@@ -281,6 +288,10 @@ def extract_text_by_page(pdf_path, enable_ocr=True, ocr_lang="eng+tha", ocr_only
                             "bbox": bbox,
                             "source": "pdf",
                         })
+                        __line_indices.append(len(raw_spans) - 1)
+
+                    if __line_indices:
+                        line_groups.append(__line_indices)
 
             # เติม underline จากเส้นกราฟิก
             segs = _collect_underline_segments(page)
@@ -298,8 +309,41 @@ def extract_text_by_page(pdf_path, enable_ocr=True, ocr_lang="eng+tha", ocr_only
                             it["underline"] = True
                             break
 
-            # ยัง "ไม่" ตัด bbox — ต้องใช้ dedup ตอน merge OCR
+            # ยังไม่ตัด bbox ต้องใช้ dedup ตอน merge OCR
             page_items = [dict(it) for it in raw_spans]
+
+            # --- รวมเป็น line-items ต่อบรรทัด (ทำหลังเติม underline จากกราฟิกแล้ว) ---
+            for __idxs in line_groups:
+                if not __idxs:
+                    continue
+                __spans = [raw_spans[i] for i in __idxs if 0 <= i < len(raw_spans)]
+                if not __spans:
+                    continue
+                __texts = [s.get("text","") for s in __spans if (s.get("text") or "").strip()]
+                if not __texts:
+                    continue
+
+                __bold      = any(bool(s.get("bold")) for s in __spans)
+                __italic    = any(bool(s.get("italic")) for s in __spans)
+                __underline = any(bool(s.get("underline")) for s in __spans)
+                __size_mm   = 0.0
+                for s in __spans:
+                    try:
+                        __size_mm = max(__size_mm, float(s.get("size_mm") or 0.0))
+                    except Exception:
+                        pass
+
+                raw_spans.append({
+                    "text": " ".join(__texts),
+                    "bold": __bold,
+                    "italic": __italic,
+                    "underline": __underline,
+                    "size_mm": __size_mm,
+                    "size_unit": "mm",
+                    "font": "",
+                    "level": "line", 
+                    "source": "pdf",
+                })
 
             # ---- OCR fallback ----
             if enable_ocr:

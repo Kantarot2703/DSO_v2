@@ -2,7 +2,7 @@ import os, io, re
 import html as _html
 import pandas as pd
 import logging
-import fitz
+import fitz, difflib
 import unicodedata as _ud
 from PyQt5.QtCore import Qt
 from openpyxl import load_workbook
@@ -38,7 +38,6 @@ def _parse_threshold_to_mm(spec_text: str):
     s = spec_text.lower().strip()
 
     # ตัวอย่างที่รองรับ:
-    # "≥ 2 mm.", ">=2mm", "> 8 pt", "min size 2 mm", "size must be >= 1.5mm"
     m = re.search(r"(≥|<=|>=|<|>)\s*(\d+(?:\.\d+)?)\s*(mm\.?|pt\.?)?", s)
     if not m:
         return None
@@ -81,6 +80,20 @@ def _is_all_caps_approx(s: str) -> bool:
     if not letters:
         return False
     return all(ch == ch.upper() for ch in letters)
+
+def _is_risky_term(term: str) -> bool:
+    s = (term or "")
+    s_nfkc = _ud.normalize("NFKC", s)
+    alnum = [c for c in s_nfkc if c.isalnum()]
+    has_non_alnum = any(not (c.isalnum() or c.isspace()) for c in s_nfkc)
+    has_digit = any(c.isdigit() for c in s_nfkc)
+    has_symbol = any(c in "+°®™×/%‐–—+-" for c in s_nfkc)
+    return has_non_alnum or (len(alnum) <= 3) or (has_digit and has_symbol)
+
+def _fuzzy_ratio(a: str, b: str) -> float:
+    a_n = normalize_text(a)
+    b_n = normalize_text(b)
+    return difflib.SequenceMatcher(None, a_n, b_n).ratio()
 
 def normalize_headers(df):
     rename = {}
@@ -250,24 +263,32 @@ def fuzzy_find_columns(df):
     logging.info(f"🛟 Fallback columns → Term: {term_col}, Language: {lang_col}, Spec: {spec_col}")
     return term_col, lang_col, spec_col
 
-def normalize_text(text):
-    if not isinstance(text, str):
+import unicodedata as _ud
+import re
+
+_FULL2HALF = str.maketrans({
+    "＋": "+", "－": "-", "％": "%", "＝": "=", "＊": "*", "／": "/",
+    "＇": "'", "＂": '"', "＆": "&", "｜": "|", "＃": "#", "＠": "@",
+    "（": "(", "）": ")", "［": "[", "］": "]", "｛": "{", "｝": "}",
+    "，": ",", "．": ".", "：": ":", "；": ";", "！": "!", "？": "?",
+    "～": "~", "＾": "^", "｀": "`", "＿": "_", "＜": "<", "＞": ">",
+    "　": " ",  # full-width space → space
+})
+
+def normalize_text(text: str) -> str:
+    if text is None:
         return ""
-    text = _ud.normalize('NFKC', text)
-    text = re.sub(r"\([^)]*\)", "", text) 
-    text = text.replace("’", "'")  
-    text = re.sub(r"\s+", " ", text)    
-    return text.strip().lower()
+    s = str(text)
+    s = _ud.normalize("NFKC", s)
+    s = s.translate(_FULL2HALF)
+    s = s.replace("\u00A0", " ")  
+    s = s.replace("‐", "-").replace("–", "-").replace("—", "-")
+    s = s.lower()
+    s = re.sub(r"\s+", " ", s).strip()
+    return s
 
 def extract_underlines_from_excel(excel_path, sheet_name, header_row_index, df):
-    """
-    อ่านรูปแบบตัวอักษรจากคอลัมน์ Symbol/Exact wording ใน Excel ให้ตรงแถวจริง
-    - พยายามอ่าน rich runs; ถ้าไม่ได้ ใช้ font ทั้ง cell
-    - จับคู่แถว df กับ worksheet ด้วยข้อความในคอลัมน์ Term ภายในหน้าต่างเล็กๆ
-    คืนค่า: เพิ่มคอลัมน์ __Term_HTML__ (HTML พร้อม <u>, <b>), ใช้ <br> แทน \n
-    """
     try:
-        # รองรับชื่อคอลัมน์ 2 แบบ
         term_col_name = None
         for cand in ["Symbol/Exact wording", "Symbol/ Exact wording"]:
             if cand in df.columns:
@@ -282,7 +303,7 @@ def extract_underlines_from_excel(excel_path, sheet_name, header_row_index, df):
         ws = wb[sheet_name]
 
         # แถวข้อมูลแรกในชีตโดยประมาณ:
-        approx_start_row = header_row_index + 2  # เดิม
+        approx_start_row = header_row_index + 2 
         term_col_idx = list(df.columns).index(term_col_name) + 1
 
         def _cell_rich_to_html(cell, plain_text: str) -> str:
@@ -871,7 +892,7 @@ def start_check(df_checklist, extracted_text_list):
         logger.info("🔎 [VERIFY] Term=%r | Spec=%r", term_text, spec_text or "-")
         logger.info("    ↳ Pages(evidence)=%s | Items=%d (PDF=%d, OCR=%d, Underline=%d, Bold=%d)",
                     page_str, len(matched_items), pdf_hits, ocr_hits, ul_hits, bd_hits)
-
+        
         if thr_mm is not None:
             if max_size_mm is None:
                 logger.info("    [FONT] Spec ≥ %.2f mm | observed: - (no measurable item)", float(thr_mm))
@@ -1057,17 +1078,39 @@ def start_check(df_checklist, extracted_text_list):
             return parts or [s.strip()]
 
         def _match_items_for_variant(variant_norm: str, all_texts):
+
+            STOPWORDS = {"in","en","na","de","la","el","em","da","do","di","du","of","and","y","et","the","a","an"}
             generic_drop = {"requirement", "address", "code"}
             keep = {"astm", "iso", "en71", "f963", "eu", "us", "uk", "br", "ca", "brazil", "canada", "canadian"}
 
             tokens = re.findall(r"[a-z0-9]+(?:-[a-z0-9]+)?", variant_norm)
             words = [w for w in tokens if (len(w) >= 3 or w in keep) and w not in generic_drop and w not in STOPWORDS]
 
+            risky = _is_risky_term(variant_norm)
             matched_items, pages = [], []
+
             for text_norm, page_number, item in all_texts:
-                if (variant_norm and variant_norm in text_norm) or (words and all(w in text_norm for w in words)):
+                hit = False
+
+                # exact substring
+                if variant_norm and variant_norm in text_norm:
+                    hit = True
+
+                # token-AND
+                elif words and all(w in text_norm for w in words):
+                    hit = True
+
+                # fuzzy กับ PDF (เทอมเสี่ยงเท่านั้น)
+                else:
+                    src = (item.get("source") or "pdf").lower()
+                    if risky and src != "ocr":
+                        if _fuzzy_ratio(variant_norm, text_norm) >= 0.96:
+                            hit = True
+
+                if hit:
                     matched_items.append(item)
                     pages.append(page_number)
+
             return matched_items, pages
 
         def _all_caps_items(items):
