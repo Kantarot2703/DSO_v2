@@ -1,13 +1,12 @@
-import os, re
+import os, re, logging
 import pandas as pd
-import logging
 import unicodedata as _ud
 import html as _html
 from PyQt5.QtWidgets import QWidget, QLabel, QHBoxLayout, QVBoxLayout, QGridLayout, QHeaderView
 from PyQt5.QtCore import Qt, QUrl
 from PyQt5 import QtWidgets, QtGui, QtCore
 from ui.pdf_viewer import PDFViewer
-from checklist_loader import load_checklist, start_check
+from checklist_loader import load_checklist, start_check, extract_part_code_from_pdf
 from pdf_reader import extract_text_by_page
 from checker import check_term_in_page
 from result_exporter import export_result_to_excel
@@ -18,6 +17,21 @@ from collections import defaultdict
 
 APP_ICON_PATH = os.path.join("assets", "app", "dso_icon.ico")
 
+# --- OCR Language sets ---
+LANG_SUPERSET = "eng+spa+fra+por+ita+deu+nld+swe+fin+dan+nor+pol+ces+slk+hun+rus+ell+tur+ara+tha"
+PART_OCR_MAP = {
+    "4LB":  "eng+spa+fra+por+tha",
+    "DOM":  LANG_SUPERSET,
+    "UU1":  LANG_SUPERSET,
+    "UU1_DOM": LANG_SUPERSET,
+    "21A": LANG_SUPERSET,
+    "19A": LANG_SUPERSET,
+    "19L": LANG_SUPERSET,
+    "2LB": LANG_SUPERSET,
+    "2XV": LANG_SUPERSET,
+    "DC1": LANG_SUPERSET,
+}
+
 class _PdfWorker(QtCore.QThread):
     finished = QtCore.pyqtSignal(list, list) 
     error = QtCore.pyqtSignal(str)
@@ -26,7 +40,18 @@ class _PdfWorker(QtCore.QThread):
         self.path = path
     def run(self):
         try:
-            pages = extract_text_by_page(self.path, enable_ocr=True, ocr_only_suspect_pages=False)
+            ocr_lang = LANG_SUPERSET
+            try:
+                codes = extract_part_code_from_pdf(self.path) or []
+                for c in codes:
+                    if c in PART_OCR_MAP:
+                        ocr_lang = PART_OCR_MAP[c]
+                        break
+            except Exception:
+                pass
+
+            pages = extract_text_by_page(self.path, enable_ocr=True, ocr_only_suspect_pages=False, ocr_lang=ocr_lang)
+
             infos = extract_product_info_by_page(pages)
             self.finished.emit(pages, infos)
         except Exception as e:
@@ -592,10 +617,10 @@ class DSOApp(QtWidgets.QWidget):
 
         for col in ["Found", "Match", "Font Size", "Note", "Verification"]:
             if col in df_ui.columns:
-                        self.result_table.setColumnWidth(df_ui.columns.get_loc(col), ref_width)
+                self.result_table.setColumnWidth(df_ui.columns.get_loc(col), ref_width)
 
-            if "Note" in df_ui.columns:
-                self.result_table.setColumnWidth(df_ui.columns.get_loc("Note"), 250)
+        if "Note" in df_ui.columns:
+            self.result_table.setColumnWidth(df_ui.columns.get_loc("Note"), 250)
 
         # หลังจบลูปเติมแถว
         self.result_table.resizeRowsToContents()

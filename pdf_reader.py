@@ -1,5 +1,7 @@
 import re
 import fitz  
+from PIL import Image as _PIL_Image
+
 
 # OCR text 
 try:
@@ -16,7 +18,6 @@ try:
 except Exception:
     cv2 = None
     np = None
-
 
 # Helpers to detect graphic underlines
 def _collect_underline_segments(page):
@@ -163,7 +164,7 @@ def _group_ocr_words_into_lines(ocr_words):
             })
     return lines
 
-def _ocr_extract_items(page, ocr_lang="eng+tha", zoom=2.0, conf_threshold=60):
+def _ocr_extract_items(page, ocr_lang="eng+tha", zoom=3.0, conf_threshold=50):
     if pytesseract is None or Image is None:
         return []
 
@@ -173,30 +174,77 @@ def _ocr_extract_items(page, ocr_lang="eng+tha", zoom=2.0, conf_threshold=60):
     if cv2 is not None and np is not None:
         try:
             arr = np.array(img.convert("RGB"))
-            img_gray = cv2.cvtColor(arr, cv2.COLOR_RGB2GRAY)
+            g_r = cv2.cvtColor(arr, cv2.COLOR_RGB2GRAY)
+            g_y = cv2.cvtColor(arr, cv2.COLOR_RGB2YCrCb)[:, :, 0]
+            img_gray = g_r if g_r.std() >= g_y.std() else g_y
+            clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+            img_gray = clahe.apply(img_gray)
         except Exception:
             img_gray = None
 
-    try:
-        data = pytesseract.image_to_data(img, lang=ocr_lang, output_type=pytesseract.Output.DICT)
-    except Exception:
+    candidates = [img]  
+    if img_gray is not None:
+            thr = cv2.adaptiveThreshold(img_gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 31, 15)
+            candidates.append(_PIL_Image.fromarray(thr))
+            inv = 255 - thr
+            candidates += [
+                _PIL_Image.fromarray(img_gray),
+                _PIL_Image.fromarray(thr),
+                _PIL_Image.fromarray(inv),
+            ]
+
+
+    def _try_ocr(img_pil, lang, cfg):
+        try:
+            return pytesseract.image_to_data(
+                img_pil, lang=lang, config=cfg, output_type=pytesseract.Output.DICT
+            )
+        except Exception:
+            return None
+
+    BIG = "eng+spa+fra+por+ita+deu+nld+swe+fin+dan+nor+pol+ces+slk+hun+rus+ell+tur+ara+tha"
+    MID = "eng+spa+fra+por+ita+deu+nld+rus+ell+tur+ara+tha"
+    LITE= "eng+spa+fra+por+ita+deu+nld+tha"
+    MIN = "eng+spa+tha"
+    TINY= "eng+tha"
+    FALL = "eng"
+
+    data = None
+    configs = [
+        "--oem 3 --psm 6 -c preserve_interword_spaces=1",
+        "--oem 3 --psm 7 -c preserve_interword_spaces=1",
+        "--oem 3 --psm 11 -c preserve_interword_spaces=1",
+    ]
+    langs = (ocr_lang or BIG, BIG, MID, LITE, MIN, TINY, FALL)
+
+    for im in candidates:
+        for cfg in configs:
+            for lg in langs:
+                if not lg:
+                    continue
+                data = _try_ocr(im, lg, cfg)
+                if data and len(data.get('text', []) or []) > 0:
+                    break
+            if data: break
+        if data: break
+
+    if not data:
         return []
 
-    tmp = [] 
+    words = []
     n = len(data.get("text", []))
+    confs = data.get("conf", ["-1"] * n)
     for i in range(n):
         txt = (data["text"][i] or "").strip()
         if not txt:
             continue
-
         try:
-            conf = float(data.get("conf", ["-1"]*n)[i])
+            conf = float(confs[i])
         except Exception:
             conf = -1.0
         if conf_threshold is not None and conf < conf_threshold:
             continue
 
-        # พิกเซลจากภาพเรนเดอร์ (สำหรับ grouping)
         x = float(data["left"][i]); y = float(data["top"][i])
         w = float(data["width"][i]); h = float(data["height"][i])
 
@@ -204,13 +252,14 @@ def _ocr_extract_items(page, ocr_lang="eng+tha", zoom=2.0, conf_threshold=60):
         size_mm = _pt_to_mm(size_pt)
         bbox_pt = (x / z, y / z, (x + w) / z, (y + h) / z)
 
-        tmp.append({
+        words.append({
             "text": txt,
-            "bold": None,
+            "bold": None,         
             "italic": None,
-            "underline": None,    
+            "underline": None,     
             "size_pt": size_pt,
             "size_mm": size_mm,
+            "size_unit": "pt",
             "font": "",
             "bbox": bbox_pt,
             "bbox_px": (x, y, x+w, y+h),
@@ -219,28 +268,59 @@ def _ocr_extract_items(page, ocr_lang="eng+tha", zoom=2.0, conf_threshold=60):
             "confidence": conf
         })
 
-    if not tmp:
+    if not words:
         return []
 
-    # group เป็นบรรทัด แล้วตรวจเส้นใต้ระดับบรรทัด
-    lines = _group_ocr_words_into_lines(tmp)
-    for ln in lines:
-        X0,Y0,X1,Y1 = ln["bbox_px"]
-        ul_line = _has_underline_in_roi(img_gray, X0, Y0, X1-X0, Y1-Y0) if img_gray is not None else None
-        if ul_line is True:
-            for w in ln["words"]:
-                w["underline"] = True
-        elif ul_line is False:
-            for w in ln["words"]:
-                if w["underline"] is None:
-                    w["underline"] = False
+    lines = _group_ocr_words_into_lines(words)
 
-    # คืน items (ตัด bbox_px ช่วยลดน้ำหนัก)
+    if img_gray is not None:
+        for ln in lines:
+            X0, Y0, X1, Y1 = ln["bbox_px"]
+            ul_line = _has_underline_in_roi(img_gray, X0, Y0, X1 - X0, Y1 - Y0)
+            if ul_line is True:
+                for w in ln["words"]:
+                    w["underline"] = True
+            elif ul_line is False:
+                for w in ln["words"]:
+                    if w["underline"] is None:
+                        w["underline"] = False
+
+    line_items = []
+    for ln in lines:
+        texts = [w["text"] for w in ln["words"] if (w.get("text") or "").strip()]
+        if not texts:
+            continue
+        size_mm = 0.0
+        for w in ln["words"]:
+            try:
+                size_mm = max(size_mm, float(w.get("size_mm") or 0.0))
+            except Exception:
+                pass
+
+        line_text = " ".join(texts)
+        X0, Y0, X1, Y1 = ln["bbox_px"]
+        bbox_pt = (X0 / z, Y0 / z, X1 / z, Y1 / z)
+        line_items.append({
+            "text": line_text,
+            "bold": None,  
+            "italic": None,
+            "underline": any(bool(w.get("underline")) for w in ln["words"]),
+            "size_pt": (Y1 - Y0) / z,
+            "size_mm": size_mm,
+            "size_unit": "pt",
+            "font": "",
+            "bbox": bbox_pt,
+            "source": "ocr",
+            "level": "line",
+            "confidence": min((w.get("confidence", 0) for w in ln["words"]), default=0),
+        })
+
     items = []
-    for w in tmp:
+    for w in words:
         w.pop("bbox_px", None)
         w.pop("height_px", None)
         items.append(w)
+    items.extend(line_items)
     return items
 
 def extract_text_by_page(pdf_path, enable_ocr=True, ocr_lang="eng+tha", ocr_only_suspect_pages=True):
@@ -279,8 +359,14 @@ def extract_text_by_page(pdf_path, enable_ocr=True, ocr_lang="eng+tha", ocr_only
                         raw_spans.append({
                             "text": text,
                             "bold": (flags & 2) != 0 or (
-                            "bold" in fontname.lower()
-                            or re.search(r"(?i)(?:-|_)?(black|heavy|demi|semi\s*bold|semibold|extra\s*bold|ultra\s*bold|blk|bd|heavy|sb)\b", fontname) is not None
+                                "bold" in fontname.lower()
+                                or re.search(
+                                    r"(?i)(?:-|_)?("
+                                    r"black|heavy|ultra\s*bold|extra\s*bold|semi\s*bold|semibold|demi\s*bold|demibold|"
+                                    r"medium|med|md|boldmt|blk|bd|sb"
+                                    r")\b",
+                                    fontname
+                                ) is not None
                             ),
                             "italic": (flags & 1) != 0,
                             "underline": ((flags & 8) != 0) or ("underline" in fontname.lower()),
@@ -312,10 +398,7 @@ def extract_text_by_page(pdf_path, enable_ocr=True, ocr_lang="eng+tha", ocr_only
                             it["underline"] = True
                             break
 
-            # ยังไม่ตัด bbox ต้องใช้ dedup ตอน merge OCR
-            page_items = [dict(it) for it in raw_spans]
-
-            # --- รวมเป็น line-items ต่อบรรทัด (ทำหลังเติม underline จากกราฟิกแล้ว) ---
+            # --- รวมเป็น line-items ต่อบรรทัด ---
             for __idxs in line_groups:
                 if not __idxs:
                     continue
@@ -344,9 +427,11 @@ def extract_text_by_page(pdf_path, enable_ocr=True, ocr_lang="eng+tha", ocr_only
                     "size_mm": __size_mm,
                     "size_unit": "mm",
                     "font": "",
-                    "level": "line", 
+                    "level": "line",
                     "source": "pdf",
                 })
+
+            page_items = [dict(it) for it in raw_spans]
 
             # ---- OCR fallback ----
             if enable_ocr:

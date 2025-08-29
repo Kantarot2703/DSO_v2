@@ -13,6 +13,9 @@ from collections import defaultdict
 # Allowed part codes from PDF filenames
 ALLOWED_PART_CODES = ['UU1_DOM', 'DOM', 'UU1', '2LB', '2XV', '4LB', '19L', '19A', '21A', 'DC1']
 
+TOKEN_RE = re.compile(
+    r"[A-Za-z0-9\u00C0-\u024F\u0400-\u04FF\u0E00-\u0E7F]+(?:-[A-Za-z0-9\u00C0-\u024F\u0400-\u04FF\u0E00-\u0E7F]+)?"
+)
 
 def _contains_any(s: str, keys) -> bool:
     s = (s or "").lower()
@@ -171,7 +174,7 @@ def extract_part_code_from_pdf(pdf_filename):
         if code in basename and code not in found:
             found.append(code)
 
-    # สแกนเนื้อหา PDF (หน้าแรกๆ) เพิ่มเติม
+    # สแกนเนื้อหา PDF หน้าแรกๆ เพิ่มเติม
     try:
         doc = fitz.open(pdf_filename)
         try:
@@ -189,7 +192,7 @@ def extract_part_code_from_pdf(pdf_filename):
                 if code in tokens and code not in found:
                     found.append(code)
 
-            # case รวม: ถ้ามีทั้ง UU1 และ DOM → ใส่ UU1_DOM ด้วย
+            # ถ้ามีทั้ง UU1 และ DOM → ใส่ UU1_DOM ด้วย
             if ("UU1" in tokens and "DOM" in tokens) and ("UU1_DOM" not in found):
                 found.insert(0, "UU1_DOM")
         finally:
@@ -264,9 +267,6 @@ def fuzzy_find_columns(df):
     logging.info(f"🛟 Fallback columns → Term: {term_col}, Language: {lang_col}, Spec: {spec_col}")
     return term_col, lang_col, spec_col
 
-import unicodedata as _ud
-import re
-
 _FULL2HALF = str.maketrans({
     "＋": "+", "－": "-", "％": "%", "＝": "=", "＊": "*", "／": "/",
     "＇": "'", "＂": '"', "＆": "&", "｜": "|", "＃": "#", "＠": "@",
@@ -280,14 +280,25 @@ def normalize_text(text: str) -> str:
     if text is None:
         return ""
     s = str(text)
-    s = _ud.normalize("NFKC", s)
+    s = _ud.normalize("NFKD", s)
     s = "".join(ch for ch in s if not _ud.combining(ch))
     s = s.translate(_FULL2HALF)
-    s = s.replace("\u00A0", " ")  
+    s = s.replace("\u00A0", " ")
     s = s.replace("‐", "-").replace("–", "-").replace("—", "-")
     s = s.lower()
     s = re.sub(r"\s+", " ", s).strip()
     return s
+
+# --- Country equivalents (normalize แล้ว) ---
+_TH_EQ = {
+    "thailand","thailande","tailandia","tailândia","thailandia","tajlandia",
+    "thajsko","thaimaa","tayland","тайланд","таиланд","ταϊλάνδη","تايلاند"
+}
+def _extract_th_country_flag(term_text: str) -> bool:
+    return any(k in normalize_text(term_text) for k in _TH_EQ)
+
+def _must_contain_country_th(text_norm: str) -> bool:
+    return any(k in text_norm for k in _TH_EQ)
 
 def extract_underlines_from_excel(excel_path, sheet_name, header_row_index, df):
     try:
@@ -787,25 +798,34 @@ def start_check(df_checklist, extracted_text_list):
         if not page_items:
             return False
 
-        page_text = " ".join((it.get("text") or "") for it in page_items).upper()
-        if PARTNO_RE.search(page_text):
-            return True
+        page_text = " ".join((it.get("text") or "") for it in page_items)
+        page_up = page_text.upper()
 
-        if doc_has_any_partno:
-            return False
+        if PARTNO_RE.search(page_up):
+            return True
 
         pdf_items = [it for it in page_items if (it.get("source") or "pdf").lower() != "ocr"]
         ocr_items = [it for it in page_items if (it.get("source") or "").lower() == "ocr"]
 
         def _has_big(items):
-            return any((_pick_size_mm(it) >= 1.6) for it in items if isinstance(it, dict))
+            try:
+                return any((_pick_size_mm(it) >= 1.6) for it in items if isinstance(it, dict))
+            except Exception:
+                return False
 
-        if len(pdf_items) >= 20 and _has_big(pdf_items):
-            return True
-        if len(pdf_items) < 5 and len(ocr_items) >= 12 and (_has_big(ocr_items) or _has_big(page_items)):
+        many_pdf   = len(pdf_items) >= 12
+        many_words = len(page_text.split()) >= 20
+        if (many_pdf and _has_big(pdf_items)) or (len(ocr_items) >= 12 and (_has_big(ocr_items) or _has_big(page_items))):
             return True
 
-        return False
+        MADE_IN_HINTS = (
+            "made in","hecho en","fabriqué en","fabrique en","prodotto in","fabbricato in",
+            "hergestellt in","gemaakt in","tillverkad i","valmistettu","fremstillet i","produceret i",
+            "produsert i","wyprodukowano w","vyrobeno v","vyrobené v","gyártva","készült",
+            "сделано в","произведено в","κατασκευ","παράγ","üret","صنع في","صناعة"
+        )
+        pn = normalize_text(page_text)
+        return any(h in pn for h in MADE_IN_HINTS)
 
     artwork_pages = []
     page_mapping  = {}
@@ -1056,8 +1076,61 @@ def start_check(df_checklist, extracted_text_list):
 
         STOPWORDS = {"in","en","na","de","la","el","em","da","do","di","du","of","and","y","et","the","a","an"}
 
-        # Regular expression to extract word tokens (alphanumeric, at least 2 chars)
+        # Regular expression to extract word tokens 
         TOKEN_RE = re.compile(r"\b\w{2,}\b", re.UNICODE)
+
+        # Auto-expand MADE IN into multilingual variants 
+        MADE_IN_MAP = {
+            "ENGLISH": ["made in"],
+            "UK": ["made in"], "US": ["made in"],
+            "SPANISH": ["hecho en", "fabricado en"], "LAAM SPANISH": ["hecho en", "fabricado en"],
+            "CANADIAN FRENCH": ["fabriqué en", "fabriqué au"], "FRENCH": ["fabriqué en", "fabrique en"],
+            "PORTUGUESE": ["feito em", "feito na", "fabricado em", "fabricado na"],
+            "BRAZILIAN PORTUGUESE": ["feito no", "feito na", "feito em", "fabricado no", "fabricado na", "fabricado em"],
+            "GERMAN": ["hergestellt in"],
+            "ITALIAN": ["prodotto in", "fabbricato in"],
+            "DUTCH": ["gemaakt in", "vervaardigd in"],
+            "SWEDISH": ["tillverkad i"],
+            "FINNISH": ["valmistettu"],
+            "DANISH": ["fremstillet i", "produceret i"],
+            "NORWEGIAN": ["produsert i", "fremstilt i"],
+            "POLISH": ["wyprodukowano w"],
+            "CZECH": ["vyrobeno v"],
+            "SLOVAK": ["vyrobené v"],
+            "HUNGARIAN": ["gyártva", "készült"],
+            "RUSSIAN": ["сделано в", "произведено в"],
+            "GREEK": ["κατασκευάζεται στην", "παράγεται στην"],
+            "TURKISH": ["üretildiği", "üretim yeri", "ürün menşei"],
+            "ARABIC": ["صنع في", "صناعة"]
+        }
+
+        def _is_bare_made_in(variant_norm: str) -> bool:
+            toks = [t for t in TOKEN_RE.findall(variant_norm) if t not in STOPWORDS]
+            if len(toks) <= 2:
+                root = variant_norm
+                return any(k in root for k in [
+                    "made", "hecho", "fabrique", "fabriqu", "prodotto", "fabbricato",
+                    "hergestellt", "gemaakt", "tillverkad", "valmistettu", "fremstillet",
+                    "produceret", "produsert", "wyprodukowano", "vyroben", "gyártva", "készült",
+                    "сделано", "произведено", "κατασκευ", "παράγ", "üret", "صنع", "صناعة"
+                ])
+            return False
+
+        def _expand_made_in_variants(variants: list, lang_list: list) -> list:
+            if not any(_is_bare_made_in(normalize_text(v)) for v in variants):
+                return variants
+            targets = [str(x).strip().upper() for x in (lang_list or []) if str(x).strip()]
+            phrases = set()
+            if targets:
+                for lg in targets:
+                    for p in MADE_IN_MAP.get(lg, []):
+                        phrases.add(p)
+            else:
+                for lst in MADE_IN_MAP.values():
+                    for p in lst:
+                        phrases.add(p)
+            out = list(dict.fromkeys(variants + list(phrases)))
+            return out
 
         def _split_term_variants(term_raw: str):
             s = str(term_raw or "")
@@ -1065,11 +1138,51 @@ def start_check(df_checklist, extracted_text_list):
             s = re.sub(r"<br\s*/?>", "\n", s, flags=re.I)
 
             parts = []
+            LANG_CUE = re.compile(
+                (
+                    r"\b("
+                    r"made\s+in|"
+                    r"hecho\s+en|"
+                    r"fabricad\w*\s+en|"
+                    r"fabriqu\w*\s+en|"
+                    r"prodotto\s+in|"
+                    r"fabbricato\s+in|"
+                    r"hergestellt\s+in|"
+                    r"feito\s+(?:em|no|na)|" 
+                    r"gemaakt\s+in|"
+                    r"tillverkad\s+i|"
+                    r"valmistettu|"
+                    r"fremstillet\s+i|"
+                    r"produceret\s+i|"
+                    r"produsert\s+i|"
+                    r"vyroben[oaé]?|"
+                    r"wyprodukowano\s+w|"
+                    r"gyártva|"
+                    r"készült|"
+                    r"сделано\s+в|"
+                    r"произведено\s+в|"
+                    r"κατασκευ|"
+                    r"παράγ|"
+                    r"üret|"
+                    r"صنع\s+في|"
+                    r"صناعة"
+                    r")\b"
+                ),
+                flags=re.I
+            )
 
             primary = [p.strip() for p in re.split(r"[\n;|]+", s) if p.strip()]
+
             for chunk in primary:
                 if re.search(r"\b(or|หรือ)\b", chunk, flags=re.I):
                     for seg in re.split(r"\b(?:or|หรือ)\b", chunk, flags=re.I):
+                        seg = seg.strip(" ,/").strip()
+                        if seg:
+                            parts.append(seg)
+                    continue
+
+                if LANG_CUE.search(chunk) and "." in chunk:
+                    for seg in re.split(r"\.\s*", chunk):
                         seg = seg.strip(" ,/").strip()
                         if seg:
                             parts.append(seg)
@@ -1082,8 +1195,8 @@ def start_check(df_checklist, extracted_text_list):
 
             return parts or [s.strip()]
 
-        def _match_items_for_variant(variant_norm: str, all_texts):
-
+        def _match_items_for_variant(variant_norm: str, all_texts, require_thailand: bool=False):
+           
             STOPWORDS = {"in","en","na","de","la","el","em","da","do","di","du","of","and","y","et","the","a","an"}
             generic_drop = {"requirement", "address", "code"}
             keep = {"astm", "iso", "en71", "f963", "eu", "us", "uk", "br", "ca", "brazil", "canada", "canadian"}
@@ -1091,33 +1204,62 @@ def start_check(df_checklist, extracted_text_list):
             tokens = TOKEN_RE.findall(variant_norm)
             words = [w for w in tokens if (len(w) >= 3 or w in keep) and w not in generic_drop and w not in STOPWORDS]
 
+            # ทางลัดสำหรับ “อายุ N+”
+            m_age = re.fullmatch(r"\s*(\d{1,2})\s*[\+\＋]\s*", variant_norm)
+            age_pat = None
+            if m_age:
+                n = m_age.group(1)
+                age_pat = re.compile(rf"\b{re.escape(n)}\s*[\+\＋]\b")
+            
             risky = _is_risky_term(variant_norm)
             matched_items, pages = [], []
+            pages_set = set()
+
+            def _collapse_ws_hyphen(s: str) -> str:
+                return re.sub(r"[\s\-]+", " ", s).strip()
 
             for text_norm, page_number, item in all_texts:
+                src = (item.get("source") or "pdf").lower()
                 hit = False
 
-                # exact substring
+                if age_pat and age_pat.search(text_norm):
+                    hit = True
                 if variant_norm and variant_norm in text_norm:
                     hit = True
+                elif words:
+                    pos, ok = 0, True
+                    for w in words:
+                        i = text_norm.find(w, pos)
+                        if i == -1:
+                            ok = False; break
+                        pos = i + len(w)
+                    if ok:
+                        hit = True
 
-                # token-AND
-                elif words and all(w in text_norm for w in words):
-                    hit = True
-
-                # fuzzy กับ PDF (เทอมเสี่ยงเท่านั้น)
-                else:
-                    src = (item.get("source") or "pdf").lower()
-                    if risky and src != "ocr":
-                        if _fuzzy_ratio(variant_norm, text_norm) >= 0.96:
+                elif risky:
+                    allow_ocr_fuzzy = ( src == "ocr" and len(variant_norm) <= 6)
+                    if src != "ocr" or allow_ocr_fuzzy:
+                        if _fuzzy_ratio(_collapse_ws_hyphen(variant_norm), _collapse_ws_hyphen(text_norm)) >= 0.96:
                             hit = True
+
+                if hit and require_thailand and not _must_contain_country_th(text_norm):
+                    hit = False
 
                 if hit:
                     matched_items.append(item)
-                    pages.append(page_number)
+                    pages_set.add(page_number)
 
+            def _safe_sz(it):
+                try: return float(it.get("size_mm") or 0.0)
+                except: return 0.0
+            matched_items.sort(key=lambda it: (
+                    str(it.get("level","")) == "line",
+                    bool(it.get("bold")),
+                    _safe_sz(it)
+                ), reverse=True)
+            pages = sorted(pages_set)
             return matched_items, pages
-
+        
         def _all_caps_items(items):
             got = False
             for it in items:
@@ -1127,15 +1269,26 @@ def start_check(df_checklist, extracted_text_list):
                     if not _is_all_caps_approx(t):
                         return False
             return got
+        
+        def _dedup_items(items):
+            seen = set(); out = []
+            for it in items:
+                key = (normalize_text(it.get("text","")), (it.get("source") or "pdf").lower())
+                if key in seen:
+                    continue
+                seen.add(key)
+                out.append(it)
+            return out
 
         # VERIFIED SECTION
         for term in term_lines:
             variants = _split_term_variants(term)
+            variants = _expand_made_in_variants(variants, row.get("Language List", []))
 
-            # เก็บ union ของหน้าที่พบ จาก "ทุก variant"
+            require_th = _extract_th_country_flag(term)
+            
             union_pages = set()
-
-            # เลือก variant ที่ "จับได้ดีที่สุด" (คง logic เดิม)
+            all_items= []
             best = {"items": [], "pages": [], "variant": ""}
             best_score = -1
             ul_keys    = ("underline", "ขีดเส้นใต้")
@@ -1143,23 +1296,22 @@ def start_check(df_checklist, extracted_text_list):
 
             for v in variants:
                 v_norm = normalize_text(v)
-                items, pages = _match_items_for_variant(v_norm, all_texts)
-
-                # สะสมหน้าจากทุก variant
+                require_th = _extract_th_country_flag(term)
+                items, pages = _match_items_for_variant(v_norm, all_texts, require_thailand=require_th)
+                all_items.extend(items)
                 union_pages.update(pages)
-
                 score = len(items)
+
                 if _contains_any(spec_lower, ul_keys):
                     score += 1000 * len([i for i in items if bool(i.get("underline"))])
                 if _contains_any(spec_lower, no_ul_keys):
                     score += 1000 * len([i for i in items if not bool(i.get("underline"))])
-
                 if score > best_score:
                     best_score = score
                     best = {"items": items, "pages": pages, "variant": v}
 
             # ใช้ best สำหรับตรวจรูปแบบ/ขนาดตัวอักษร
-            matched_items = best["items"]
+            matched_items = _dedup_items(all_items) or best["items"]
 
             # แต่ "การรายงานหน้า" ให้ใช้ union ของทุก variant
             found_pages_all = sorted(set(union_pages))
@@ -1210,15 +1362,17 @@ def start_check(df_checklist, extracted_text_list):
 
                 # หาหลักฐานบนหน้าใดก็ได้ที่พบ requirement มี "คำใต้เส้น" ที่ตรงกับ under_tokens
                 added = None
+                added_page = None
                 for text_norm, page_no, item in all_texts:
                     if page_no in found_pages_all and bool(item.get("underline")):
                         if (not under_tokens) or any(tok in text_norm for tok in under_tokens):
                             added = item
+                            added_page = page_no
                             break
                 if added is not None:
                     matched_items.append(added)
                     logger.info("    [SALVAGE] added underline evidence from page %s: %r (src=%s, size=%.2f mm)",
-                        page_no,
+                        added_page,
                         (added.get("text") or "")[:80],
                         (added.get("source") or "pdf"),
                         _pick_size_mm(added))
@@ -1228,47 +1382,53 @@ def start_check(df_checklist, extracted_text_list):
             underlines  = [bool(i.get("underline", False)) for i in matched_items]
             sizes_mm    = [_pick_size_mm(i) for i in matched_items]
             max_size_mm = max(sizes_mm) if sizes_mm else None
-            underline_present = any(underlines)
-
-            if _contains_any(spec_lower, ("underline", "ขีดเส้นใต้")) and (not underline_present) and found_pages_all:
-                token_set = set()
-                for v in variants:
-                    v_norm = normalize_text(v)
-                    token_set.update(TOKEN_RE.findall(v_norm))
-                token_set = {t for t in token_set if len(t) >= 2 and t not in STOPWORDS}
-
-                for text_norm, page_no, item in all_texts:
-                    if page_no in found_pages_all and bool(item.get("underline")):
-                        if (not token_set) or any(tok in text_norm for tok in token_set):
-                            underline_present = True
-                            matched_items.append(item) 
-                            break
 
             # ---- Bold ----
-            if found_pages_all and matched_items and spec != "-":
-                bold_present = any(bolds) 
-                if _contains_any(spec_lower, ("bold", "ตัวหนา")) and not bold_present:
-                    token_set = set()
-                    for v in variants:
-                        v_norm = normalize_text(v)
-                        token_set.update(TOKEN_RE.findall(v_norm))
-                    token_set = {t for t in token_set if len(t) >= 2 and t not in STOPWORDS}
+            bold_present = any(bolds)
+            if _contains_any(spec_lower, ("bold", "ตัวหนา")) and not bold_present and found_pages_all:
 
-                    added_bold = None
-                    for text_norm, page_no, item in all_texts:
-                        if page_no in found_pages_all and (item.get("source") or "pdf").lower() != "ocr" and bool(item.get("bold")):
-                            if (not token_set) or all(tok in text_norm for tok in token_set) or any(normalize_text(vv) in text_norm for vv in variants):
-                                added_bold = item
-                                break
+                variant_norms = [normalize_text(vv) for vv in variants]
+                variant_token_lists = [
+                    [t for t in TOKEN_RE.findall(vn) if len(t) >= 2 and t not in STOPWORDS]
+                    for vn in variant_norms
+                ]
 
-                    if added_bold is not None:
-                        matched_items.append(added_bold)
-                        bold_present = True
-                        notes.append("Bold evidence found on artwork page")
+                added_bold = None
+                added_bold_page = None
 
-                if _contains_any(spec_lower, ("bold", "ตัวหนา")) and not bold_present:
-                    match_result = "❌"
-                    notes.append("Not Bold")
+                for text_norm, page_no, item in all_texts:
+                    if page_no not in found_pages_all:
+                        continue
+
+                    # bold จากเมทาดาต้า + ข้อความตรงอย่างน้อยหนึ่งภาษา
+                    if bool(item.get("bold")):
+                        if any( (vn and vn in text_norm) or (vtoks and all(tok in text_norm for tok in vtoks))
+                                for vn, vtoks in zip(variant_norms, variant_token_lists) ):
+                            added_bold = item
+                            added_bold_page = page_no
+                            break
+
+                    # กู้แบบบรรทัด (line-level) ALL CAPS + ขนาดพอ และข้อความตรงอย่างน้อยหนึ่งภาษา
+                    if str(item.get("level","")) == "line":
+                        if any( (vn and vn in text_norm) or (vtoks and all(tok in text_norm for tok in vtoks))
+                                for vn, vtoks in zip(variant_norms, variant_token_lists) ):
+                            try:
+                                if _is_all_caps_approx(item.get("text","")) and (_pick_size_mm(item) >= 1.2):
+                                    added_bold = item
+                                    added_bold_page = page_no
+                                    break
+                            except Exception:
+                                pass
+
+                if added_bold is not None:
+                    matched_items.append(added_bold)
+                    bold_present = True
+                    notes.append("Bold evidence found on artwork page")
+
+            # สรุปผล Bold 
+            if _contains_any(spec_lower, ("bold", "ตัวหนา")) and not bold_present:
+                match_result = "❌"
+                notes.append("Not Bold")
 
             # ---- Underline ----
             underline_present = any(underlines)
