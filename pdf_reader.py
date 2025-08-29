@@ -278,7 +278,10 @@ def extract_text_by_page(pdf_path, enable_ocr=True, ocr_lang="eng+tha", ocr_only
 
                         raw_spans.append({
                             "text": text,
-                            "bold": (flags & 2) != 0 or ("bold" in fontname.lower()),
+                            "bold": (flags & 2) != 0 or (
+                            "bold" in fontname.lower()
+                            or re.search(r"(?i)(?:-|_)?(black|heavy|demi|semi\s*bold|semibold|extra\s*bold|ultra\s*bold|blk|bd|heavy|sb)\b", fontname) is not None
+                            ),
                             "italic": (flags & 1) != 0,
                             "underline": ((flags & 8) != 0) or ("underline" in fontname.lower()),
                             "size_pt": size_pt,

@@ -1,94 +1,93 @@
-2025-08-28 08:57:27,990 | INFO | root | 📂 PDF filename: JDV96_MT2026_TROPHY CHAMPIONS_1_64_Mix1_4LB_A3_review.pdf
-2025-08-28 08:57:27,990 | INFO | root | 🧠 Part codes detected: ['4LB']
-2025-08-28 08:57:28,006 | INFO | root | 📄 Sheet names: ['DOM', '4LB']
-2025-08-28 08:57:28,006 | INFO | root | ✅ Found matching sheet: 4LB
-2025-08-28 08:57:28,006 | INFO | root | 🧾 Header chosen at row 2 | columns: ['Check list', 'Requirement', 'Symbol/  Exact wording', 'Specification', 'Package Panel', 'Procedure']...
-2025-08-28 08:57:28,006 | INFO | root | 🧾 Columns found in sheet: ['Check list', 'Requirement', 'Symbol/  Exact wording', 'Specification', 'Package Panel', 'Procedure', 'Remark', 'Image Match', 'Image Path']
-2025-08-28 08:57:28,006 | INFO | root | 🛟 Fallback columns → Term: Symbol/  Exact wording, Language: None, Spec: Requirement
-2025-08-28 08:57:28,006 | INFO | root | 🔎 ใช้คอลัมน์ Term: Symbol/  Exact wording, Language: None, Spec: Requirement
-2025-08-28 08:57:31,405 | INFO | root | [underline] approx_start_row=3, real_start_row=4
-2025-08-28 08:57:35,014 | INFO | checklist_loader | 📄 Pages considered: 6 (real pages: [1, 2, 3, 4, 5, 6])
-2025-08-28 08:57:35,014 | INFO | checklist_loader | 📄 Artwork-like pages considered: 6 (real pages: [1, 2, 3, 4, 5, 6])
-2025-08-28 08:57:35,042 | INFO | checklist_loader | 🔎 [VERIFY] Term='4LB' | Spec='-'
-2025-08-28 08:57:35,042 | INFO | checklist_loader |     ↳ Pages(evidence)=All Pages | Items=18 (PDF=12, OCR=6, Underline=6, Bold=6)
-2025-08-28 08:57:35,042 | INFO | checklist_loader |     [HIT#1] text='4LB:' | src=pdf | underline=False | bold=True | size=5.74 mm
-2025-08-28 08:57:35,043 | INFO | checklist_loader |     [HIT#2] text='4LB' | src=pdf | underline=False | bold=False | size=2.20 mm
-2025-08-28 08:57:35,043 | INFO | checklist_loader |     [HIT#3] text='4LB:' | src=ocr | underline=True | bold=False | size=4.41 mm
-2025-08-28 08:57:35,054 | INFO | checklist_loader | 🔎 [VERIFY] Term='3+' | Spec='≥ 3 mm.'
-2025-08-28 08:57:35,054 | INFO | checklist_loader |     ↳ Pages(evidence)=All Pages | Items=18 (PDF=18, OCR=0, Underline=0, Bold=0)
-2025-08-28 08:57:35,055 | INFO | checklist_loader |     [FONT] Spec ≥ 3.00 mm | observed: 5.49 mm → PASS
-2025-08-28 08:57:35,055 | INFO | checklist_loader |     [HIT#1] text='3+' | src=pdf | underline=False | bold=False | size=5.49 mm
-2025-08-28 08:57:35,055 | INFO | checklist_loader |     [HIT#2] text='3+' | src=pdf | underline=False | bold=False | size=5.49 mm
-2025-08-28 08:57:35,055 | INFO | checklist_loader |     [HIT#3] text='3+' | src=pdf | underline=False | bold=False | size=5.49 mm
-2025-08-28 08:57:35,056 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'Product’s common or generic name
+2025-08-29 07:31:18,243 | INFO | root | 📂 PDF filename: FLF56_26HW_TEAM_TRANSPORT_2Pk_MIX2_4LB_A2_review.pdf
+2025-08-29 07:31:18,244 | INFO | root | 🧠 Part codes detected: ['4LB']
+2025-08-29 07:31:18,244 | INFO | root | 📄 Sheet names: ['DOM', '4LB', '21A']
+2025-08-29 07:31:18,244 | INFO | root | ✅ Found matching sheet: 4LB
+2025-08-29 07:31:18,244 | INFO | root | 🧾 Header chosen at row 2 | columns: ['Check list', 'Requirement', 'Symbol/  Exact wording', 'Specification', 'Package Panel', 'Procedure']...
+2025-08-29 07:31:18,244 | INFO | root | 🧾 Columns found in sheet: ['Check list', 'Requirement', 'Symbol/  Exact wording', 'Specification', 'Package Panel', 'Procedure', 'Remark', 'Image Match', 'Image Path']
+2025-08-29 07:31:18,244 | INFO | root | 🛟 Fallback columns → Term: Symbol/  Exact wording, Language: None, Spec: Requirement
+2025-08-29 07:31:18,254 | INFO | root | 🔎 ใช้คอลัมน์ Term: Symbol/  Exact wording, Language: None, Spec: Requirement
+2025-08-29 07:31:18,985 | INFO | root | [underline] approx_start_row=3, real_start_row=4
+2025-08-29 07:31:21,830 | INFO | checklist_loader | 📄 Pages considered: 3 (real pages: [1, 2, 3])
+2025-08-29 07:31:21,831 | INFO | checklist_loader | 📄 Artwork-like pages considered: 3 (real pages: [1, 2, 3])
+2025-08-29 07:31:21,879 | INFO | checklist_loader | 🔎 [VERIFY] Term='4LB' | Spec='-'
+2025-08-29 07:31:21,880 | INFO | checklist_loader |     ↳ Pages(evidence)=All Pages | Items=22 (PDF=18, OCR=4, Underline=12, Bold=6)
+2025-08-29 07:31:21,880 | INFO | checklist_loader |     [HIT#1] text='4LB' | src=pdf | underline=False | bold=True | size=7.26 mm
+2025-08-29 07:31:21,881 | INFO | checklist_loader |     [HIT#2] text='4LB/' | src=pdf | underline=False | bold=True | size=5.59 mm
+2025-08-29 07:31:21,882 | INFO | checklist_loader |     [HIT#3] text='JHX91-4LB_1103473157' | src=pdf | underline=True | bold=False | size=2.60 mm
+2025-08-29 07:31:21,900 | INFO | checklist_loader | 🔎 [VERIFY] Term='3+' | Spec='≥ 3 mm.'
+2025-08-29 07:31:21,900 | INFO | checklist_loader |     ↳ Pages(evidence)=All Pages | Items=5 (PDF=3, OCR=2, Underline=0, Bold=0)
+2025-08-29 07:31:21,900 | INFO | checklist_loader |     [FONT] Spec ≥ 3.00 mm | observed: 5.29 mm → PASS
+2025-08-29 07:31:21,901 | INFO | checklist_loader |     [HIT#1] text='3+' | src=pdf | underline=False | bold=False | size=5.29 mm
+2025-08-29 07:31:21,901 | INFO | checklist_loader |     [HIT#2] text='3+' | src=ocr | underline=False | bold=False | size=3.70 mm
+2025-08-29 07:31:21,902 | INFO | checklist_loader |     [HIT#3] text='3+' | src=pdf | underline=False | bold=False | size=5.29 mm
+2025-08-29 07:31:21,903 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'Product’s common or generic name
 (Canada)' | Spec: '≥ 1.6 mm.' → Manual verification
-2025-08-28 08:57:35,063 | INFO | checklist_loader | 🔎 [VERIFY] Term='MADE IN THAILAND\nHECHO EN TAILANDIA\nFABRIQUÉ EN THAÏLANDE' | Spec='Bold and All capital letters'
-2025-08-28 08:57:35,063 | INFO | checklist_loader |     ↳ Pages(evidence)=All Pages | Items=6 (PDF=6, OCR=0, Underline=0, Bold=6)
-2025-08-28 08:57:35,064 | INFO | checklist_loader |     [HIT#1] text='MADE IN THAILAND. HECHO EN TAILANDIA. FABRIQUÉ EN THAÏLANDE. FABRICADO NA TAILÂN' | src=pdf | underline=False | bold=True | size=2.48 mm
-2025-08-28 08:57:35,064 | INFO | checklist_loader |     [HIT#2] text='MADE IN THAILAND. HECHO EN TAILANDIA. FABRIQUÉ EN THAÏLANDE. FABRICADO NA TAILÂN' | src=pdf | underline=False | bold=True | size=2.48 mm
-2025-08-28 08:57:35,064 | INFO | checklist_loader |     [HIT#3] text='MADE IN THAILAND. HECHO EN TAILANDIA. FABRIQUÉ EN THAÏLANDE. FABRICADO NA TAILÂN' | src=pdf | underline=False | bold=True | size=2.48 mm
-2025-08-28 08:57:35,067 | INFO | checklist_loader | 🔎 [VERIFY] Term='FABRICADO NA TAILÂNDIA' | Spec='Bold and All capital letters'
-2025-08-28 08:57:35,067 | INFO | checklist_loader |     ↳ Pages(evidence)=All Pages | Items=6 (PDF=6, OCR=0, Underline=0, Bold=6)
-2025-08-28 08:57:35,067 | INFO | checklist_loader |     [HIT#1] text='MADE IN THAILAND. HECHO EN TAILANDIA. FABRIQUÉ EN THAÏLANDE. FABRICADO NA TAILÂN' | src=pdf | underline=False | bold=True | size=2.48 mm
-2025-08-28 08:57:35,068 | INFO | checklist_loader |     [HIT#2] text='MADE IN THAILAND. HECHO EN TAILANDIA. FABRIQUÉ EN THAÏLANDE. FABRICADO NA TAILÂN' | src=pdf | underline=False | bold=True | size=2.48 mm
-2025-08-28 08:57:35,068 | INFO | checklist_loader |     [HIT#3] text='MADE IN THAILAND. HECHO EN TAILANDIA. FABRIQUÉ EN THAÏLANDE. FABRICADO NA TAILÂN' | src=pdf | underline=False | bold=True | size=2.48 mm
-2025-08-28 08:57:35,146 | INFO | checklist_loader | 🔎 [VERIFY] Term='Imported by/ Importé par: Mattel Canada Inc., Mississauga, Ontario L5R 3W2.' | Spec='≥1.6 mm.  \n(Measure lowercase "o")'
-2025-08-28 08:57:35,147 | INFO | checklist_loader |     ↳ Pages(evidence)=All Pages | Items=19 (PDF=12, OCR=7, Underline=7, Bold=0)
-2025-08-28 08:57:35,147 | INFO | checklist_loader |     [FONT] Spec ≥ 1.60 mm | observed: 5.47 mm → PASS
-2025-08-28 08:57:35,147 | INFO | checklist_loader |     [HIT#1] text='Importador: 02350-12-JUE-DIGESA. Marcas registradas utilizadas bajo licencia. To' | src=pdf | underline=False | bold=False | size=2.61 mm
-2025-08-28 08:57:35,148 | INFO | checklist_loader |     [HIT#2] text='Importé par: Mattel Canada Inc., Mississauga, Ontario L5R 3W2. Manufactured, imp' | src=pdf | underline=False | bold=False | size=2.61 mm
-2025-08-28 08:57:35,148 | INFO | checklist_loader |     [HIT#3] text='imported' | src=ocr | underline=True | bold=False | size=2.47 mm
-2025-08-28 08:57:35,199 | INFO | checklist_loader | 🔎 [VERIFY] Term='Manufactured, imported or distributed by:' | Spec='-'
-2025-08-28 08:57:35,199 | INFO | checklist_loader |     ↳ Pages(evidence)=All Pages | Items=6 (PDF=6, OCR=0, Underline=0, Bold=0)
-2025-08-28 08:57:35,200 | INFO | checklist_loader |     [HIT#1] text='Importé par: Mattel Canada Inc., Mississauga, Ontario L5R 3W2. Manufactured, imp' | src=pdf | underline=False | bold=False | size=2.61 mm
-2025-08-28 08:57:35,200 | INFO | checklist_loader |     [HIT#2] text='Importé par: Mattel Canada Inc., Mississauga, Ontario L5R 3W2. Manufactured, imp' | src=pdf | underline=False | bold=False | size=2.61 mm
-2025-08-28 08:57:35,200 | INFO | checklist_loader |     [HIT#3] text='Importé par: Mattel Canada Inc., Mississauga, Ontario L5R 3W2. Manufactured, imp' | src=pdf | underline=False | bold=False | size=2.61 mm
-2025-08-28 08:57:35,243 | INFO | checklist_loader | 🔎 [VERIFY] Term='Mattel Europa B.V., Gondel 1, 1186 MJ Amstelveen, Nederland.' | Spec='Underline'
-2025-08-28 08:57:35,243 | INFO | checklist_loader |     ↳ Pages(evidence)=All Pages | Items=2 (PDF=0, OCR=2, Underline=2, Bold=0)
-2025-08-28 08:57:35,243 | INFO | checklist_loader |     [HIT#1] text='Gondel1' | src=ocr | underline=True | bold=False | size=1.94 mm
-2025-08-28 08:57:35,243 | INFO | checklist_loader |     [HIT#2] text='Gondel' | src=ocr | underline=True | bold=False | size=1.94 mm
-2025-08-28 08:57:35,274 | INFO | checklist_loader | 🔎 [VERIFY] Term='GUARDAR PARA EVENTUAIS CONSULTAS.' | Spec='The statement must be located before the distributor’s or importer’s name and address.'
-2025-08-28 08:57:35,289 | INFO | checklist_loader |     ↳ Pages(evidence)=All Pages | Items=6 (PDF=6, OCR=0, Underline=0, Bold=0)
-2025-08-28 08:57:35,289 | INFO | checklist_loader |     [HIT#1] text='Kuala Lumpur, Malaysia. Mattel South Africa (PTY) LTD, Ofﬁce 102 I3, 30 Melrose ' | src=pdf | underline=False | bold=False | size=2.61 mm
-2025-08-28 08:57:35,289 | INFO | checklist_loader |     [HIT#2] text='Kuala Lumpur, Malaysia. Mattel South Africa (PTY) LTD, Ofﬁce 102 I3, 30 Melrose ' | src=pdf | underline=False | bold=False | size=2.61 mm
-2025-08-28 08:57:35,289 | INFO | checklist_loader |     [HIT#3] text='Kuala Lumpur, Malaysia. Mattel South Africa (PTY) LTD, Ofﬁce 102 I3, 30 Melrose ' | src=pdf | underline=False | bold=False | size=2.61 mm
-2025-08-28 08:57:35,343 | INFO | checklist_loader | 🔎 [VERIFY] Term='CONFORMS TO / CONFORME AUX NORMES DE SÉCURITÉ DE / CUMPLE CON LAS NORMAS DE SEGURIDAD DE ASTM F963.' | Spec='≥  2 mm.'
-2025-08-28 08:57:35,344 | INFO | checklist_loader |     ↳ Pages(evidence)=All Pages | Items=7 (PDF=6, OCR=1, Underline=1, Bold=0)
-2025-08-28 08:57:35,344 | INFO | checklist_loader |     [FONT] Spec ≥ 2.00 mm | observed: 3.08 mm → PASS
-2025-08-28 08:57:35,344 | INFO | checklist_loader |     [HIT#1] text='CONFORMS TO / CONFORME AUX NORMES DE SÉCURITÉ DE / CUMPLE CON LAS NORMAS DE SEGU' | src=pdf | underline=False | bold=False | size=3.08 mm
-2025-08-28 08:57:35,344 | INFO | checklist_loader |     [HIT#2] text='CONFORMS TO / CONFORME AUX NORMES DE SÉCURITÉ DE / CUMPLE CON LAS NORMAS DE SEGU' | src=pdf | underline=False | bold=False | size=3.08 mm
-2025-08-28 08:57:35,344 | INFO | checklist_loader |     [HIT#3] text='CONFORMS TO / CONFORME AUX NORMES DE SÉCURITÉ DE / CUMPLE CON LAS NORMAS DE SEGU' | src=pdf | underline=False | bold=False | size=3.08 mm
-2025-08-28 08:57:35,345 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'Canada requirement
+2025-08-29 07:31:21,917 | INFO | checklist_loader | 🔎 [VERIFY] Term='MADE IN THAILAND\nHECHO EN TAILANDIA\nFABRIQUÉ EN THAÏLANDE' | Spec='Bold and All capital letters'
+2025-08-29 07:31:21,918 | INFO | checklist_loader |     ↳ Pages(evidence)=All Pages | Items=3 (PDF=3, OCR=0, Underline=0, Bold=0)
+2025-08-29 07:31:21,919 | INFO | checklist_loader |     [HIT#1] text='MADE IN THAILAND. FABRIQUÉ EN THAÏLANDE. HECHO EN TAILANDIA. FABRICADO NA TAILÂN' | src=pdf | underline=False | bold=False | size=3.01 mm
+2025-08-29 07:31:21,920 | INFO | checklist_loader |     [HIT#2] text='MADE IN THAILAND. FABRIQUÉ EN THAÏLANDE. HECHO EN TAILANDIA. FABRICADO NA TAILÂN' | src=pdf | underline=False | bold=False | size=3.01 mm
+2025-08-29 07:31:21,920 | INFO | checklist_loader |     [HIT#3] text='MADE IN THAILAND. FABRIQUÉ EN THAÏLANDE. HECHO EN TAILANDIA. FABRICADO NA TAILÂN' | src=pdf | underline=False | bold=False | size=3.01 mm
+2025-08-29 07:31:21,926 | INFO | checklist_loader | 🔎 [VERIFY] Term='FABRICADO NA TAILÂNDIA' | Spec='Bold and All capital letters'
+2025-08-29 07:31:21,927 | INFO | checklist_loader |     ↳ Pages(evidence)=All Pages | Items=3 (PDF=3, OCR=0, Underline=0, Bold=0)
+2025-08-29 07:31:21,928 | INFO | checklist_loader |     [HIT#1] text='MADE IN THAILAND. FABRIQUÉ EN THAÏLANDE. HECHO EN TAILANDIA. FABRICADO NA TAILÂN' | src=pdf | underline=False | bold=False | size=3.01 mm
+2025-08-29 07:31:21,928 | INFO | checklist_loader |     [HIT#2] text='MADE IN THAILAND. FABRIQUÉ EN THAÏLANDE. HECHO EN TAILANDIA. FABRICADO NA TAILÂN' | src=pdf | underline=False | bold=False | size=3.01 mm
+2025-08-29 07:31:21,929 | INFO | checklist_loader |     [HIT#3] text='MADE IN THAILAND. FABRIQUÉ EN THAÏLANDE. HECHO EN TAILANDIA. FABRICADO NA TAILÂN' | src=pdf | underline=False | bold=False | size=3.01 mm
+2025-08-29 07:31:22,021 | INFO | checklist_loader | 🔎 [VERIFY] Term='Imported by/ Importé par: Mattel Canada Inc., Mississauga, Ontario L5R 3W2.' | Spec='≥1.6 mm.  \n(Measure lowercase "o")'
+2025-08-29 07:31:22,021 | INFO | checklist_loader |     ↳ Pages(evidence)=All Pages | Items=10 (PDF=6, OCR=4, Underline=0, Bold=0)
+2025-08-29 07:31:22,021 | INFO | checklist_loader |     [FONT] Spec ≥ 1.60 mm | observed: 5.12 mm → PASS
+2025-08-29 07:31:22,024 | INFO | checklist_loader |     [HIT#1] text='Reg. Importador: 02350-12-JUE-DIGESA. Marcas registradas utilizadas bajo licenci' | src=pdf | underline=False | bold=False | size=2.62 mm
+2025-08-29 07:31:22,024 | INFO | checklist_loader |     [HIT#2] text='by/ Importé par: Mattel Canada Inc., Mississauga, Ontario L5R 3W2. Manufactured,' | src=pdf | underline=False | bold=False | size=2.62 mm
+2025-08-29 07:31:22,025 | INFO | checklist_loader |     [HIT#3] text='imported' | src=ocr | underline=False | bold=False | size=5.12 mm
+2025-08-29 07:31:22,100 | INFO | checklist_loader | 🔎 [VERIFY] Term='Manufactured, imported or distributed by:' | Spec='-'
+2025-08-29 07:31:22,100 | INFO | checklist_loader |     ↳ Pages(evidence)=All Pages | Items=6 (PDF=3, OCR=3, Underline=0, Bold=0)
+2025-08-29 07:31:22,104 | INFO | checklist_loader |     [HIT#1] text='by/ Importé par: Mattel Canada Inc., Mississauga, Ontario L5R 3W2. Manufactured,' | src=pdf | underline=False | bold=False | size=2.62 mm
+2025-08-29 07:31:22,105 | INFO | checklist_loader |     [HIT#2] text='distributed' | src=ocr | underline=False | bold=False | size=1.76 mm
+2025-08-29 07:31:22,105 | INFO | checklist_loader |     [HIT#3] text='by/ Importé par: Mattel Canada Inc., Mississauga, Ontario L5R 3W2. Manufactured,' | src=pdf | underline=False | bold=False | size=2.62 mm
+2025-08-29 07:31:22,178 | INFO | checklist_loader | 🔎 [VERIFY] Term='Mattel Europa B.V., Gondel 1, 1186 MJ Amstelveen, Nederland.' | Spec='Underline'
+2025-08-29 07:31:22,178 | INFO | checklist_loader |     ↳ Pages(evidence)=All Pages | Items=1 (PDF=0, OCR=1, Underline=1, Bold=0)
+2025-08-29 07:31:22,179 | INFO | checklist_loader |     [HIT#1] text='Nederland,' | src=ocr | underline=True | bold=False | size=1.76 mm
+2025-08-29 07:31:22,230 | INFO | checklist_loader | 🔎 [VERIFY] Term='GUARDAR PARA EVENTUAIS CONSULTAS.' | Spec='The statement must be located before the distributor’s or importer’s name and address.'
+2025-08-29 07:31:22,230 | INFO | checklist_loader |     ↳ Pages(evidence)=All Pages | Items=3 (PDF=3, OCR=0, Underline=0, Bold=0)
+2025-08-29 07:31:22,230 | INFO | checklist_loader |     [HIT#1] text='LTD, Ofﬁce 102 I3, 30 Melrose Boulevard, Johannesburg 2196. GUARDAR PARA EVENTUA' | src=pdf | underline=False | bold=False | size=2.62 mm
+2025-08-29 07:31:22,230 | INFO | checklist_loader |     [HIT#2] text='LTD, Ofﬁce 102 I3, 30 Melrose Boulevard, Johannesburg 2196. GUARDAR PARA EVENTUA' | src=pdf | underline=False | bold=False | size=2.62 mm
+2025-08-29 07:31:22,230 | INFO | checklist_loader |     [HIT#3] text='LTD, Ofﬁce 102 I3, 30 Melrose Boulevard, Johannesburg 2196. GUARDAR PARA EVENTUA' | src=pdf | underline=False | bold=False | size=2.62 mm
+2025-08-29 07:31:22,312 | INFO | checklist_loader | 🔎 [VERIFY] Term='CONFORMS TO / CONFORME AUX NORMES DE SÉCURITÉ DE / CUMPLE CON LAS NORMAS DE SEGURIDAD DE ASTM F963.' | Spec='≥  2 mm.'
+2025-08-29 07:31:22,312 | INFO | checklist_loader |     ↳ Pages(evidence)=All Pages | Items=6 (PDF=3, OCR=3, Underline=0, Bold=0)
+2025-08-29 07:31:22,312 | INFO | checklist_loader |     [FONT] Spec ≥ 2.00 mm | observed: 4.06 mm → PASS
+2025-08-29 07:31:22,312 | INFO | checklist_loader |     [HIT#1] text='CONFORMS TO / CONFORME AUX NORMES DE SÉCURITÉ DE /' | src=pdf | underline=False | bold=False | size=2.89 mm
+2025-08-29 07:31:22,312 | INFO | checklist_loader |     [HIT#2] text='CONFORMS' | src=ocr | underline=False | bold=False | size=2.12 mm
+2025-08-29 07:31:22,320 | INFO | checklist_loader |     [HIT#3] text='CONFORMS TO / CONFORME AUX NORMES DE SÉCURITÉ DE /' | src=pdf | underline=False | bold=False | size=2.89 mm
+2025-08-29 07:31:22,321 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'Canada requirement
 (Canada)' | Spec: '-' → Manual verification
-2025-08-28 08:57:35,345 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'Space for Date code
+2025-08-29 07:31:22,321 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'Space for Date code
 (All markets)' | Spec: 'Must not cover any text and illustration' → Manual verification
-2025-08-28 08:57:35,346 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'Lion mark
+2025-08-29 07:31:22,321 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'Lion mark
 (All markets)' | Spec: '≥ 5 mm.' → Manual verification
-2025-08-28 08:57:35,346 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'CE mark
+2025-08-29 07:31:22,321 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'CE mark
 (All markets)' | Spec: '≥ 5 mm.' → Manual verification
-2025-08-28 08:57:35,346 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'UKCA mark
+2025-08-29 07:31:22,325 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'UKCA mark
 (All markets)' | Spec: '≥ 5 mm.' → Manual verification
-2025-08-28 08:57:35,347 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'MC  mark
+2025-08-29 07:31:22,325 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'MC  mark
 (All markets)' | Spec: '≥ 5x5 mm.
 (Exclude numbers under MC )' → Manual verification
-2025-08-28 08:57:35,347 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'CIB: Consumer Information Block
+2025-08-29 07:31:22,326 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'CIB: Consumer Information Block
 (All markets)' | Spec: 'must be located near the legal copy' → Manual verification
-2025-08-28 08:57:35,347 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'Argentina logo
+2025-08-29 07:31:22,327 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'Argentina logo
 (Argentina)' | Spec: '≥ 12. 5 mm.' → Manual verification
-2025-08-28 08:57:35,347 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'Brazilian logo
+2025-08-29 07:31:22,327 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'Brazilian logo
 (Brazil)' | Spec: '≥ 20 mm.
 ( largest panel is < 278.75 cm2)' → Manual verification
-2025-08-28 08:57:35,348 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'Waste Sorting Information
+2025-08-29 07:31:22,329 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'Waste Sorting Information
 (Italy)' | Spec: 'The letter abbreviation and number code ≥ 1.2 mm.' → Manual verification
-2025-08-28 08:57:35,348 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'Waste Sorting Information
+2025-08-29 07:31:22,330 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'Waste Sorting Information
 (France)' | Spec: 'The "FR" tab font must be “ Flama condensed bold”  and text height must be ≥ 1.26 mm and all caps.' → Manual verification
-2025-08-28 08:57:35,348 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'Waste Sorting Information
+2025-08-29 07:31:22,331 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'Waste Sorting Information
 (France)' | Spec: 'The Triman logo height must be ≥ 10 mm.
  when space is limited can be used minimum size 6 mm.' → Manual verification
-2025-08-28 08:57:35,348 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'Sorting & Donation Label
+2025-08-29 07:31:22,332 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'Sorting & Donation Label
 (France)' | Spec: 'Standard Dimensions: The Triman logo height must be ≥ 10 mm.
 Compact Dimensions: The Triman logo height must be ≥ 6 mm.' → Manual verification
-2025-08-28 08:57:35,348 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'Sorting Symbols
+2025-08-29 07:31:22,333 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'Sorting Symbols
 (Spain)' | Spec: 'Single Material;
 Limited space: The height of symbol must be ≥ 8 mm
 Available space: The height of symbol must be ≥ 10 mm
@@ -96,9 +95,9 @@ Available space: The height of symbol must be ≥ 10 mm
 Multi-Material;
 Limited space: The height of symbol must be ≥ 8 mm
 Available space: The height of symbol must be ≥ 10 mm' → Manual verification
-2025-08-28 08:57:35,348 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'Warning statement: SPW
+2025-08-29 07:31:22,335 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'Warning statement: SPW
 (USA)' | Spec: 'Size as remark column' → Manual verification
-2025-08-28 08:57:35,348 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'International
+2025-08-29 07:31:22,335 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'International
  warning statement: SPW
 (All markets)' | Spec: 'Packages area of the largest panel is < 278.75 cm² 
 
@@ -108,7 +107,7 @@ The cautionary statements following the signal word must be in all uppercase and
 
 Mercosur requirement : The signal words "ADVERTENCIA"  must be in uppercase and ≥ 2 mm.
 The cautionary statements following the signal word must be ≥ 1.5 mm and can be in uppercase or lowercase.' → Manual verification
-2025-08-28 08:57:35,348 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'International
+2025-08-29 07:31:22,338 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'International
  warning statement: SPG
 (All markets)' | Spec: 'Packages area of the largest panel is < 278.75 cm² 
 
@@ -118,18 +117,18 @@ The cautionary statements following the signal word must be in all uppercase and
 
 Mercosur requirement : The signal words "ADVERTENCIA"  must be in uppercase and ≥ 2 mm.
 The cautionary statements following the signal word must be ≥ 1.5 mm and can be in uppercase or lowercase.' → Manual verification
-2025-08-28 08:57:35,352 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'UPC requirement
+2025-08-29 07:31:22,339 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'UPC requirement
 (All markets)' | Spec: 'Size of UPC Barcode depend on area panel' → Manual verification
-2025-08-28 08:57:35,352 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'List of content : Text
+2025-08-29 07:31:22,339 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'List of content : Text
 (All market)' | Spec: 'All markets
 - open package = no need list of content
 - close package = need list of content' → Manual verification
-2025-08-28 08:57:35,352 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'List of content : Text
+2025-08-29 07:31:22,341 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'List of content : Text
 (Brazil)' | Spec: 'Brazil : The word “CONTEÚDO:” and the numerical portion (quantity) of the list of contents must meet the text height requirement per Table' → Manual verification
-2025-08-28 08:57:35,352 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'List of content : Text
+2025-08-29 07:31:22,343 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'List of content : Text
 (Canada)' | Spec: 'Canada : The text ≥ 1.6 mm.
 The number must be in bold and must meet the height requirement per table as below.' → Manual verification
-2025-08-28 08:57:35,354 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'List of content : 
+2025-08-29 07:31:22,344 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'List of content : 
 pictorial
 (All markets)' | Spec: 'Must have text above picture at least 4 languages (English, French, Brazilian Portuguese, Russian)
 
@@ -138,5 +137,5 @@ The word “CONTEÚDO:” and the numerical portion (quantity) of the list of co
 
 Canada : 
 Any additional languages on the package must not be displayed with greater prominence than the French. So the translation of French must equal Brazilian Portuguese.' → Manual verification
-2025-08-28 08:57:35,354 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'Instruction of Play function feature
+2025-08-29 07:31:22,344 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'Instruction of Play function feature
 (All markets)' | Spec: '-' → Manual verification

@@ -13,6 +13,7 @@ from collections import defaultdict
 # Allowed part codes from PDF filenames
 ALLOWED_PART_CODES = ['UU1_DOM', 'DOM', 'UU1', '2LB', '2XV', '4LB', '19L', '19A', '21A', 'DC1']
 
+
 def _contains_any(s: str, keys) -> bool:
     s = (s or "").lower()
     return any(k in s for k in keys)
@@ -280,6 +281,7 @@ def normalize_text(text: str) -> str:
         return ""
     s = str(text)
     s = _ud.normalize("NFKC", s)
+    s = "".join(ch for ch in s if not _ud.combining(ch))
     s = s.translate(_FULL2HALF)
     s = s.replace("\u00A0", " ")  
     s = s.replace("‐", "-").replace("–", "-").replace("—", "-")
@@ -1054,6 +1056,9 @@ def start_check(df_checklist, extracted_text_list):
 
         STOPWORDS = {"in","en","na","de","la","el","em","da","do","di","du","of","and","y","et","the","a","an"}
 
+        # Regular expression to extract word tokens (alphanumeric, at least 2 chars)
+        TOKEN_RE = re.compile(r"\b\w{2,}\b", re.UNICODE)
+
         def _split_term_variants(term_raw: str):
             s = str(term_raw or "")
             s = s.replace("\r", "")
@@ -1083,7 +1088,7 @@ def start_check(df_checklist, extracted_text_list):
             generic_drop = {"requirement", "address", "code"}
             keep = {"astm", "iso", "en71", "f963", "eu", "us", "uk", "br", "ca", "brazil", "canada", "canadian"}
 
-            tokens = re.findall(r"[a-z0-9]+(?:-[a-z0-9]+)?", variant_norm)
+            tokens = TOKEN_RE.findall(variant_norm)
             words = [w for w in tokens if (len(w) >= 3 or w in keep) and w not in generic_drop and w not in STOPWORDS]
 
             risky = _is_risky_term(variant_norm)
@@ -1190,7 +1195,7 @@ def start_check(df_checklist, extracted_text_list):
                     under_frags = _extract_underlined_substrings(html_src)
                     for frag in under_frags:
                         v_norm = normalize_text(frag)
-                        under_tokens.update(re.findall(r"[a-z0-9]+(?:-[a-z0-9]+)?", v_norm))
+                        under_tokens.update(TOKEN_RE.findall(v_norm))
                 except Exception:
                     pass
 
@@ -1198,7 +1203,7 @@ def start_check(df_checklist, extracted_text_list):
                 if not under_tokens:
                     for v in variants:
                         v_norm = normalize_text(v)
-                        under_tokens.update(re.findall(r"[a-z0-9]+(?:-[a-z0-9]+)?", v_norm))
+                        under_tokens.update(TOKEN_RE.findall(v_norm))
 
                 STOPWORDS = {"in","en","na","de","la","el","em","da","do","di","du","of","and","y","et","the","a","an"}
                 under_tokens = {t for t in under_tokens if len(t) >= 2 and t not in STOPWORDS}
@@ -1229,7 +1234,7 @@ def start_check(df_checklist, extracted_text_list):
                 token_set = set()
                 for v in variants:
                     v_norm = normalize_text(v)
-                    token_set.update(re.findall(r"[a-z0-9]+(?:-[a-z0-9]+)?", v_norm))
+                    token_set.update(TOKEN_RE.findall(v_norm))
                 token_set = {t for t in token_set if len(t) >= 2 and t not in STOPWORDS}
 
                 for text_norm, page_no, item in all_texts:
@@ -1241,7 +1246,27 @@ def start_check(df_checklist, extracted_text_list):
 
             # ---- Bold ----
             if found_pages_all and matched_items and spec != "-":
-                if _contains_any(spec_lower, ("bold", "ตัวหนา")) and not all(bolds):
+                bold_present = any(bolds) 
+                if _contains_any(spec_lower, ("bold", "ตัวหนา")) and not bold_present:
+                    token_set = set()
+                    for v in variants:
+                        v_norm = normalize_text(v)
+                        token_set.update(TOKEN_RE.findall(v_norm))
+                    token_set = {t for t in token_set if len(t) >= 2 and t not in STOPWORDS}
+
+                    added_bold = None
+                    for text_norm, page_no, item in all_texts:
+                        if page_no in found_pages_all and (item.get("source") or "pdf").lower() != "ocr" and bool(item.get("bold")):
+                            if (not token_set) or all(tok in text_norm for tok in token_set) or any(normalize_text(vv) in text_norm for vv in variants):
+                                added_bold = item
+                                break
+
+                    if added_bold is not None:
+                        matched_items.append(added_bold)
+                        bold_present = True
+                        notes.append("Bold evidence found on artwork page")
+
+                if _contains_any(spec_lower, ("bold", "ตัวหนา")) and not bold_present:
                     match_result = "❌"
                     notes.append("Not Bold")
 
