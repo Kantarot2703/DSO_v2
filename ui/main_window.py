@@ -18,44 +18,71 @@ from collections import defaultdict
 APP_ICON_PATH = os.path.join("assets", "app", "dso_icon.ico")
 
 # --- OCR Language sets ---
-LANG_SUPERSET = "eng+spa+fra+por+ita+deu+nld+swe+fin+dan+nor+pol+ces+slk+hun+rus+ell+tur+ara+tha"
-PART_OCR_MAP = {
-    "4LB":  "eng+spa+fra+por+tha",
-    "DOM":  LANG_SUPERSET,
-    "UU1":  LANG_SUPERSET,
-    "UU1_DOM": LANG_SUPERSET,
-    "21A": LANG_SUPERSET,
-    "19A": LANG_SUPERSET,
-    "19L": LANG_SUPERSET,
-    "2LB": LANG_SUPERSET,
-    "2XV": LANG_SUPERSET,
-    "DC1": LANG_SUPERSET,
+LANG_SUPERSET = "eng+spa+fra+por+ita+deu+nld+swe+fin+dan+nor+pol+ces+slk+hun+rus+ell+tur+ara+jpn+chi_sim+tha"
+
+PART_OCR_MAP_FAST = {
+    "4LB":  "eng+spa+fra+por",
+    "DOM":      "eng",
+    "UU1":      "eng",
+    "UU1_DOM":  "eng",
+    "21A": "eng+spa+fra+por+tha",
+    "19A": "eng+spa+fra+por+tha",
+    "19L": "eng+spa+fra+por+tha",
+    "2LB": "eng+fra",
+    "2XV": "chi_sim+eng",
+    "DC1": "eng+fra+deu+ita+nld+spa+por",
 }
+
+#  ตรงตามสเปกภาษาของแต่ละ Part 
+PART_OCR_MAP_FULL = {
+    "4LB":  "eng+spa+fra+por",
+    "DOM":  "eng",
+    "UU1":  "eng",
+    "UU1_DOM": "eng",
+    "21A": "eng+fra+deu+ita+nld+spa+por+swe+fin+dan+nor+rus+pol+ces+slk+hun",
+    "19A": "eng+fra+deu+ita+nld+spa+por+swe+fin+dan+nor+pol+ces+slk+hun+rus+ell+tur+ara",
+    "19L": "eng+fra+deu+ita+nld+spa+por+swe+fin+dan+nor+pol+ces+slk+hun+rus+ell+tur+ara",
+    "2LB": "eng+fra",
+    "2XV": "chi_sim+eng",
+    "DC1": "eng+fra+deu+ita+nld+spa+por+pol+ces+hun+jpn",
+}
+
+def _get_ocr_langs_for_part(part_code: str):
+    code = (part_code or "").strip().upper()
+    fast = PART_OCR_MAP_FAST.get(code, "eng")
+    full = PART_OCR_MAP_FULL.get(code, fast)
+    return fast, full
 
 class _PdfWorker(QtCore.QThread):
     finished = QtCore.pyqtSignal(list, list) 
     error = QtCore.pyqtSignal(str)
+
     def __init__(self, path):
         super().__init__()
         self.path = path
+
     def run(self):
         try:
-            ocr_lang = LANG_SUPERSET
             try:
                 codes = extract_part_code_from_pdf(self.path) or []
-                for c in codes:
-                    if c in PART_OCR_MAP:
-                        ocr_lang = PART_OCR_MAP[c]
-                        break
             except Exception:
-                pass
+                codes = []
+            part_code = (codes[0] if codes else getattr(self, "part_code", "")) or ""
 
-            pages = extract_text_by_page(self.path, enable_ocr=True, ocr_only_suspect_pages=False, ocr_lang=ocr_lang)
+            fast_lang, full_lang = _get_ocr_langs_for_part(part_code)
 
+            pages = extract_text_by_page(
+                self.path,
+                enable_ocr=True,
+                ocr_only_suspect_pages=True,   
+                ocr_lang_fast=fast_lang,        
+                ocr_lang_full=full_lang         
+            )
             infos = extract_product_info_by_page(pages)
             self.finished.emit(pages, infos)
+
         except Exception as e:
-            self.error.emit(str(e))
+            self.finished.emit([], {"error": str(e)})
 
 class _ExcelWorker(QtCore.QThread):
     finished = QtCore.pyqtSignal(object)     

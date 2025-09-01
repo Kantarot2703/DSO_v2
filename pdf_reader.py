@@ -157,12 +157,21 @@ def _group_ocr_words_into_lines(ocr_words):
             })
     return lines
 
-def _ocr_extract_items(page, ocr_lang="eng+tha", zoom=3.0, conf_threshold=30):
+def _ocr_extract_items(page, ocr_lang="eng+tha", zooms=None, conf_threshold=30, configs=None):
     if pytesseract is None or Image is None:
         return []
 
-    # ลองหลายซูมสำหรับตัวเล็ก / ไอคอน
-    zooms = [3.0, 3.6, 4.0]
+    # ใช้ซูม/คอนฟิกที่ส่งมา ถ้าไม่ส่งให้ใช้ดีฟอลต์แบบเดิม
+    if zooms is None:
+        zooms = [3.0, 3.6, 4.0]
+    if configs is None:
+        configs = [
+            "--oem 3 --psm 6 -c preserve_interword_spaces=1",
+            "--oem 3 --psm 7 -c preserve_interword_spaces=1",
+            "--oem 3 --psm 11 -c preserve_interword_spaces=1",
+            "--oem 3 --psm 13 -c preserve_interword_spaces=1",
+        ]
+
     all_words = []
 
     for z in zooms:
@@ -182,17 +191,18 @@ def _ocr_extract_items(page, ocr_lang="eng+tha", zoom=3.0, conf_threshold=30):
 
         candidates = [img.convert("L")]
         if img_gray is not None and cv2 is not None:
-            den = cv2.fastNlMeansDenoising(img_gray, None, 10, 7, 21)
-            thr = cv2.adaptiveThreshold(den, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
-                                        cv2.THRESH_BINARY, 31, 15)
-            inv = 255 - thr
-            k3 = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
-            closed = cv2.morphologyEx(thr, cv2.MORPH_CLOSE, k3, iterations=1)
-            dil    = cv2.dilate(closed, k3, iterations=1)
-
-            for arr in (den, thr, inv, closed, dil):
-                try: candidates.append(_PIL_Image.fromarray(arr))
-                except Exception: pass
+            try:
+                den = cv2.fastNlMeansDenoising(img_gray, None, 10, 7, 21)
+                thr = cv2.adaptiveThreshold(den, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+                                            cv2.THRESH_BINARY, 31, 15)
+                inv = 255 - thr
+                k3 = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
+                closed = cv2.morphologyEx(thr, cv2.MORPH_CLOSE, k3, iterations=1)
+                dil    = cv2.dilate(closed, k3, iterations=1)
+                for arr in (den, thr, inv, closed, dil):
+                    candidates.append(_PIL_Image.fromarray(arr))
+            except Exception:
+                pass
 
         def _try_ocr(img_pil, lang, cfg):
             try:
@@ -202,23 +212,19 @@ def _ocr_extract_items(page, ocr_lang="eng+tha", zoom=3.0, conf_threshold=30):
             except Exception:
                 return None
 
+        # จัดลำดับภาษาที่จะลอง
         BIG  = "eng+spa+fra+por+ita+deu+nld+swe+fin+dan+nor+pol+ces+slk+hun+rus+ell+tur+ara+tha"
         LITE = "eng+spa+fra+por+ita+deu+nld+tha"
         TINY = "eng+tha"
         FALL = "eng"
         langs = (ocr_lang or BIG, BIG, LITE, TINY, FALL)
-        configs = [
-            "--oem 3 --psm 6 -c preserve_interword_spaces=1",
-            "--oem 3 --psm 7 -c preserve_interword_spaces=1",
-            "--oem 3 --psm 11 -c preserve_interword_spaces=1",
-            "--oem 3 --psm 13 -c preserve_interword_spaces=1",
-        ]
 
         got = None
         for im in candidates:
             for cfg in configs:
                 for lg in langs:
-                    if not lg: continue
+                    if not lg:
+                        continue
                     data = _try_ocr(im, lg, cfg)
                     if data and len(data.get('text', []) or []) > 0:
                         got = (data, zf)
@@ -232,15 +238,16 @@ def _ocr_extract_items(page, ocr_lang="eng+tha", zoom=3.0, conf_threshold=30):
         data, used_zoom = got
         n = len(data.get("text", []))
         confs = data.get("conf", ["-1"] * n)
-        words = []
         for i in range(n):
             txt = (data["text"][i] or "").strip()
-            if not txt: continue
+            if not txt:
+                continue
             try:
                 conf = float(confs[i])
             except Exception:
                 conf = -1.0
 
+            # เก็บ '+'/‘＋’ แม้คอนฟิเดนซ์ต่ำ
             low_punct_keep = txt in {"+", "＋"}
             if conf_threshold is not None and (conf < conf_threshold) and not low_punct_keep:
                 continue
@@ -252,7 +259,7 @@ def _ocr_extract_items(page, ocr_lang="eng+tha", zoom=3.0, conf_threshold=30):
             size_mm = _pt_to_mm(size_pt)
             bbox_pt = (x / used_zoom, y / used_zoom, (x + w) / used_zoom, (y + h) / used_zoom)
 
-            words.append({
+            all_words.append({
                 "text": txt,
                 "bold": None,
                 "italic": None,
@@ -267,17 +274,14 @@ def _ocr_extract_items(page, ocr_lang="eng+tha", zoom=3.0, conf_threshold=30):
                 "source": "ocr",
                 "confidence": conf
             })
-        all_words.extend(words)
 
     if not all_words:
         return []
 
-    # รวมเป็นบรรทัด + ตรวจเส้นใต้จากภาพ
+    # จัดกลุ่มเป็นบรรทัด + ตรวจ underline จากภาพ (เหมือนเดิม)
     lines = _group_ocr_words_into_lines(all_words)
-
     img_gray = None
     try:
-        # เรนเดอร์ที่ซูมสูงสุดเพื่อเช็ค underline
         img_hi, z_hi = _render_page_to_pil(page, zoom=4.0)
         if cv2 is not None and np is not None:
             arr = np.array(img_hi.convert("RGB"))
@@ -297,7 +301,7 @@ def _ocr_extract_items(page, ocr_lang="eng+tha", zoom=3.0, conf_threshold=30):
                     if w["underline"] is None:
                         w["underline"] = False
 
-    # แปลงเป็น items
+    # รวม word+line items
     line_items = []
     for ln in lines:
         texts = [w["text"] for w in ln["words"] if (w.get("text") or "").strip()]
@@ -307,12 +311,10 @@ def _ocr_extract_items(page, ocr_lang="eng+tha", zoom=3.0, conf_threshold=30):
         for w in ln["words"]:
             try: size_mm = max(size_mm, float(w.get("size_mm") or 0.0))
             except Exception: pass
-
-        line_text = " ".join(texts)
         X0, Y0, X1, Y1 = ln["bbox_px"]
-        bbox_pt = (X0 / 3.0, Y0 / 3.0, X1 / 3.0, Y1 / 3.0)  # สัดส่วนไม่ critical เพราะเราไม่ส่ง bbox ออก
+        bbox_pt = (X0 / 3.0, Y0 / 3.0, X1 / 3.0, Y1 / 3.0)  # ไม่ critical
         line_items.append({
-            "text": line_text,
+            "text": " ".join(texts),
             "bold": None,
             "italic": None,
             "underline": any(bool(w.get("underline")) for w in ln["words"]),
@@ -334,40 +336,43 @@ def _ocr_extract_items(page, ocr_lang="eng+tha", zoom=3.0, conf_threshold=30):
     items.extend(line_items)
     return items
 
-def _detect_vector_plus_signs(page, min_len=2.5, max_len=40.0, center_tol=1.5, length_ratio_tol=0.4):
+def _detect_vector_plus_signs(page, min_len=2.5, max_len=40.0, center_tol=1.5, length_ratio_tol=0.45):
     Hs, Vs = [], []
     try:
         for d in page.get_drawings():
             for it in d.get("items", []):
                 op = it[0]
-                if op == "l":  # line
+                if op == "l":
                     p0, p1 = it[1], it[2]
                     dx, dy = p1.x - p0.x, p1.y - p0.y
                     length = (dx*dx + dy*dy) ** 0.5
                     if length < min_len or length > max_len:
                         continue
-                    if abs(dy) <= 0.8:  # horizontal
-                        x0, x1 = sorted([p0.x, p1.x]); y = (p0.y + p1.y)/2.0
+                    if abs(dy) <= 0.8:
+                        x0, x1 = sorted([p0.x, p1.x])
+                        y = (p0.y + p1.y) / 2.0
                         Hs.append((x0, y, x1))
-                    elif abs(dx) <= 0.8:  # vertical
-                        y0, y1 = sorted([p0.y, p1.y]); x = (p0.x + p1.x)/2.0
-                        Vs.append((x, y0, x))
+                    elif abs(dx) <= 0.8:
+                        y0, y1 = sorted([p0.y, p1.y])
+                        x = (p0.x + p1.x) / 2.0
+                        Vs.append((x, y0, y1))
     except Exception:
         return []
 
     plus_boxes = []
     for (hx0, hy, hx1) in Hs:
-        hcx = (hx0 + hx1)/2.0
+        hcx  = (hx0 + hx1) / 2.0
         hlen = (hx1 - hx0)
-        for (vx, vy0, _vx1) in Vs:
-            vcy = (vy0 + hy)
-            vlen = abs(hy - vy0) * 2.0 if vy0 != hy else 0.0
-            if abs(vx - hcx) <= center_tol and abs(hy - ((vy0 + hy)/2.0)) <= center_tol:
-                if hlen > 0:
-                    ratio = abs(vlen - hlen) / max(hlen, 1e-6)
+        for (vx, vy0, vy1) in Vs:
+            vcy  = (vy0 + vy1) / 2.0
+            vlen = (vy1 - vy0)
+
+            if abs(vx - hcx) <= center_tol and abs(vcy - hy) <= center_tol:
+                if hlen > 0 and vlen > 0:
+                    ratio = abs(vlen - hlen) / max(hlen, vlen)
                     if ratio <= length_ratio_tol:
                         x0, x1 = min(hx0, vx), max(hx1, vx)
-                        y0, y1 = min(vy0, hy), max(hy, vy0)
+                        y0, y1 = min(vy0, hy), max(vy1, hy)
                         pad = 1.2
                         plus_boxes.append((x0 - pad, y0 - pad, x1 + pad, y1 + pad))
     return plus_boxes
@@ -411,8 +416,19 @@ def _synthesize_3plus_items_from_vectors(raw_spans, plus_boxes, proximity_pt=14.
             })
     return items
 
-def extract_text_by_page(pdf_path, enable_ocr=True, ocr_lang="eng+tha", ocr_only_suspect_pages=True):
+def extract_text_by_page(pdf_path, enable_ocr=True, ocr_lang="eng+tha", ocr_only_suspect_pages=True,
+                         ocr_lang_fast=None, ocr_lang_full=None):
+    
+    if (ocr_lang_fast is None) and (ocr_lang_full is None):
+        ocr_lang_fast = ocr_lang or "eng"
+        ocr_lang_full = ocr_lang_fast
+    elif (ocr_lang_fast is None) and (ocr_lang_full is not None):   
+        ocr_lang_fast = ocr_lang_full     
+    elif (ocr_lang_full is None) and (ocr_lang_fast is not None):
+        ocr_lang_full = ocr_lang_fast
+
     doc = fitz.open(pdf_path)
+
     try:
         all_pages = []
 
@@ -526,23 +542,68 @@ def extract_text_by_page(pdf_path, enable_ocr=True, ocr_lang="eng+tha", ocr_only
                 if plus_boxes:
                     synth = _synthesize_3plus_items_from_vectors(raw_spans, plus_boxes, proximity_pt=14.0)
                     if synth:
-                        raw_spans.extend(synth)
+                        page_items = _dedup_extend_items(page_items, synth)
             except Exception:
                 pass
 
             # ---- OCR fallback ----
             if enable_ocr:
+                # 1) เงื่อนไข OCR: ถ้ามีภาพ ให้ OCR เสมอ (กันพลาด text-on-image)
+                has_images = False
+                try:
+                    has_images = bool(page.get_images(full=True))
+                except Exception:
+                    has_images = False
+
                 do_ocr = True
-                if ocr_only_suspect_pages:
+                if ocr_only_suspect_pages and not has_images:
                     enough_items = len(page_items) >= 5
                     has_readable_size = any((it.get("size_mm") or 0) >= 1.0 for it in page_items)
                     do_ocr = not (enough_items and has_readable_size)
+
                 if do_ocr:
-                    ocr_items = _ocr_extract_items(page, ocr_lang=ocr_lang, zoom=3.0, conf_threshold=40.0)
+                    # FAST: เร็วขึ้นด้วยซูม/คอนฟิกเบา + ลด conf ให้ 35 (เดิม 45 ทำให้พลาด)
+                    fast_zooms   = [2.6, 3.0]
+                    fast_cfgs    = [
+                        "--oem 3 --psm 6 -c preserve_interword_spaces=1",
+                        "--oem 3 --psm 11 -c preserve_interword_spaces=1",
+                    ]
+                    ocr_items = _ocr_extract_items(
+                        page,
+                        ocr_lang=ocr_lang_fast,
+                        zooms=fast_zooms,
+                        conf_threshold=35,
+                        configs=fast_cfgs
+                    )
+
+                    # พิจารณาว่า "ยังไม่พอ" → ค่อยขยับเป็น FULL เฉพาะหน้านี้
+                    need_full = False
+                    if not ocr_items:
+                        need_full = True
+                    else:
+                        text_join = " ".join([(it.get("text") or "") for it in ocr_items])[:600]
+                        few_words = sum(1 for it in ocr_items if (it.get("text") or "").strip()) < 8
+                        miss_plus = ("+" not in text_join) and ("＋" not in text_join)
+                        need_full = (few_words and miss_plus)
+
+                    if need_full and (ocr_lang_full and (ocr_lang_full != ocr_lang_fast)):
+                        full_zooms = [3.6, 4.0]
+                        full_cfgs  = [
+                            "--oem 3 --psm 6 -c preserve_interword_spaces=1",
+                            "--oem 3 --psm 7 -c preserve_interword_spaces=1",
+                            "--oem 3 --psm 11 -c preserve_interword_spaces=1",
+                        ]
+                        ocr_items = _ocr_extract_items(
+                            page,
+                            ocr_lang=ocr_lang_full,
+                            zooms=full_zooms,
+                            conf_threshold=30,  
+                            configs=full_cfgs
+                        )
+
                     if ocr_items:
                         page_items = _dedup_extend_items(page_items, ocr_items)
 
-            # ตัด bbox ออกก่อนส่งออก
             for it in page_items:
                 it.pop("bbox", None)
             all_pages.append(page_items)

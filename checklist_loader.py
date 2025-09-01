@@ -1488,7 +1488,10 @@ def start_check(df_checklist, extracted_text_list):
                 detected_all |= (_codes or set())
 
             # ---- Notes ----
-            note_str = ", ".join(_dedup_notes(notes)) if notes else "-"
+            if str(found_flag).startswith("✅") and (match_result == "✔"):
+                note_str = "-"
+            else:
+                note_str = ", ".join(_dedup_notes(notes)) if notes else "-"
 
             # --- LOG หลักฐานการตรวจ (หลักฐานจาก PDF/OCR จริง) ---
             _log_evidence(
