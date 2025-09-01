@@ -853,6 +853,14 @@ def start_check(df_checklist, extracted_text_list):
     list(page_mapping.values())
     )
 
+    # รวมข้อความแบบ normalize ทั้งหน้า เพื่อจับกรณีประโยคยาวข้ามบรรทัด
+    page_norm_text = {}
+    for artwork_index, page_items in enumerate(artwork_pages):
+        real_no = page_mapping[artwork_index + 1]
+        page_norm_text[real_no] = " ".join(
+            normalize_text(it.get("text", "")) for it in page_items if (it.get("text"))
+        )
+
     all_texts = []
     for artwork_index, page_items in enumerate(artwork_pages):
         for item in page_items:
@@ -893,7 +901,7 @@ def start_check(df_checklist, extracted_text_list):
 
     # Map: ภาพรวม code ต่อ "เลขหน้าใน PDF จริง" (เฉพาะหน้า artwork)
     page_langcodes = {}                 
-    code_pages_map = defaultdict(set)   
+    code_pages_map = defaultdict(set)
 
     for artwork_index, page_items in enumerate(artwork_pages):
         real_no = page_mapping[artwork_index + 1]      # เลขหน้าใน PDF จริง
@@ -1205,6 +1213,15 @@ def start_check(df_checklist, extracted_text_list):
                         parts.append(seg)
 
             return parts or [s.strip()]
+        
+        def _tokens_in_order(tokens, text_norm: str) -> bool:
+            pos = 0
+            for w in tokens:
+                i = text_norm.find(w, pos)
+                if i == -1:
+                    return False
+                pos = i + len(w)
+            return True
 
         def _match_items_for_variant(variant_norm: str, all_texts, require_thailand: bool=False):
            
@@ -1262,12 +1279,21 @@ def start_check(df_checklist, extracted_text_list):
 
             def _safe_sz(it):
                 try: return float(it.get("size_mm") or 0.0)
-                except: return 0.0
+                except Exception: 
+                    return 0.0
+                
             matched_items.sort(key=lambda it: (
                     str(it.get("level","")) == "line",
                     bool(it.get("bold")),
                     _safe_sz(it)
                 ), reverse=True)
+            
+            # Page level fallback กรณีข้อความโดนตัดบรรทัดเลยไม่อยู่ใน item เดียว
+            if not pages_set and len(words) >= 2:
+                for pno, ptxt in page_norm_text.items():
+                    if _tokens_in_order(words, ptxt):
+                        pages_set.add(pno)
+
             pages = sorted(pages_set)
             return matched_items, pages
         

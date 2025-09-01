@@ -312,7 +312,7 @@ def _ocr_extract_items(page, ocr_lang="eng+tha", zooms=None, conf_threshold=30, 
             try: size_mm = max(size_mm, float(w.get("size_mm") or 0.0))
             except Exception: pass
         X0, Y0, X1, Y1 = ln["bbox_px"]
-        bbox_pt = (X0 / 3.0, Y0 / 3.0, X1 / 3.0, Y1 / 3.0)  # ไม่ critical
+        bbox_pt = (X0 / 3.0, Y0 / 3.0, X1 / 3.0, Y1 / 3.0) 
         line_items.append({
             "text": " ".join(texts),
             "bold": None,
@@ -416,6 +416,207 @@ def _synthesize_3plus_items_from_vectors(raw_spans, plus_boxes, proximity_pt=14.
             })
     return items
 
+def _find_token_plus_boxes_from_spans(raw_spans):
+    """
+    ดึง bbox ของ '+'/'＋' ที่มาเป็นโทเคนจาก PDF text spans
+    ใช้เป็น anchor สำหรับ ROI-OCR เมื่อไม่มี '+' แบบเวกเตอร์
+    """
+    boxes = []
+    for it in raw_spans:
+        if (it.get("source") or "pdf") != "pdf":
+            continue
+        t = (it.get("text") or "").strip()
+        if t in {"+", "＋"}:
+            b = it.get("bbox")
+            if b:
+                boxes.append(tuple(b))
+    return boxes
+
+def _synthesize_3plus_items_from_tokens(raw_spans, proximity_pt=14.0):
+    """
+    สังเคราะห์ '3+' จากโทเคน '3' และ '+' ที่อยู่ใกล้กันใน PDF spans
+    (สำหรับเคสที่ไม่มีเส้นเวกเตอร์เป็น '+')
+    """
+    def _center(b): return ((b[0]+b[2])/2.0, (b[1]+b[3])/2.0)
+
+    threes = []
+    pluses = []
+    for it in raw_spans:
+        if (it.get("source") or "pdf") != "pdf":
+            continue
+        t = (it.get("text") or "").strip()
+        if t == "3" and it.get("bbox"):
+            threes.append(it)
+        elif t in {"+", "＋"} and it.get("bbox"):
+            pluses.append(it)
+
+    items = []
+    for p in pluses:
+        pc = _center(p["bbox"])
+        best, best_d = None, 1e9
+        for t in threes:
+            tc = _center(t["bbox"])
+            d = ((pc[0]-tc[0])**2 + (pc[1]-tc[1])**2)**0.5
+            if d < best_d:
+                best, best_d = t, d
+        if best and best_d <= proximity_pt:
+            size_mm = float(best.get("size_mm") or p.get("size_mm") or 0.0)
+            items.append({
+                "text": "3+",
+                "bold": bool(best.get("bold")) or bool(p.get("bold")),
+                "italic": bool(best.get("italic")) or bool(p.get("italic")),
+                "underline": bool(best.get("underline")) or bool(p.get("underline")),
+                "size_mm": size_mm,
+                "size_unit": "mm",
+                "font": best.get("font","") or p.get("font",""),
+                "source": "pdf",
+                "level": "line",
+                "bbox": [
+                    min(best["bbox"][0], p["bbox"][0]),
+                    min(best["bbox"][1], p["bbox"][1]),
+                    max(best["bbox"][2], p["bbox"][2]),
+                    max(best["bbox"][3], p["bbox"][3]),
+                ],
+            })
+    return items
+
+def _join_adjacent_3_plus(items, max_gap_factor=1.2, same_line_tol=0.6):
+    pluses, threes = [], []
+    for it in items or []:
+        b = it.get("bbox")
+        t = (it.get("text") or "").strip()
+        if not b or not t:
+            continue
+        if t in {"+", "＋"}:
+            pluses.append(it)
+        elif t == "3":
+            threes.append(it)
+
+    synth = []
+    for p in pluses:
+        px0, py0, px1, py1 = p["bbox"]
+        ph = max(1.0, py1 - py0)
+
+        best, best_gap = None, 1e9
+        for t in threes:
+            tx0, ty0, tx1, ty1 = t["bbox"]
+            th = max(1.0, ty1 - ty0)
+
+            if abs((ty0+ty1)/2.0 - (py0+py1)/2.0) <= same_line_tol * max(ph, th):
+                if tx1 <= px0 + 0.3 * max(ph, th):
+                    gap = px0 - tx1
+                    if 0 <= gap <= max_gap_factor * max(ph, th) and gap < best_gap:
+                        best, best_gap = t, gap
+
+        if best:
+            size_mm = float(best.get("size_mm") or p.get("size_mm") or 0.0)
+            synth.append({
+                "text": "3+",
+                "bold": bool(best.get("bold")) or bool(p.get("bold")),
+                "italic": bool(best.get("italic")) or bool(p.get("italic")),
+                "underline": bool(best.get("underline")) or bool(p.get("underline")),
+                "size_mm": size_mm,
+                "size_unit": "mm",
+                "font": best.get("font","") or p.get("font",""),
+                "source": "pdf",
+                "level": "line",
+                "bbox": [
+                    min(best["bbox"][0], p["bbox"][0]),
+                    min(best["bbox"][1], p["bbox"][1]),
+                    max(best["bbox"][2], p["bbox"][2]),
+                    max(best["bbox"][3], p["bbox"][3]),
+                ],
+            })
+    return synth
+
+def _page_has_3plus_text(items):
+    P = re.compile(r"(?<!\w)3\s*[\+\＋](?!\w)")
+    for it in items or []:
+        t = (it.get("text") or "").strip()
+        if t and P.search(t):
+            return True
+    return False
+
+def _ocr_3plus_via_roi(page, plus_boxes, zoom=4.0):
+    out = []
+    if not plus_boxes or pytesseract is None or cv2 is None or np is None:
+        return out
+
+    # เรนเดอร์ครั้งเดียว ใช้ซ้ำทุก ROI
+    img_pil, z = _render_page_to_pil(page, zoom=zoom)
+    g = np.array(img_pil.convert("L"))
+
+    H, W = g.shape[:2]
+
+    # ช่วยตัดพิกัดให้อยู่ในภาพ
+    def _clip(v, lo, hi): 
+        return max(lo, min(int(v), hi))
+
+    for (x0, y0, x1, y1) in plus_boxes:
+        X0, Y0, X1, Y1 = x0 * z, y0 * z, x1 * z, y1 * z
+        w = max(1.0, X1 - X0)
+        h = max(1.0, Y1 - Y0)
+
+        left_pad   = 2.2 * w 
+        right_pad  = 0.8 * w
+        top_pad    = 0.9 * h
+        bottom_pad = 0.9 * h
+
+        rx0 = _clip(X0 - left_pad, 0, W - 1)
+        rx1 = _clip(X1 + right_pad, 0, W - 1)
+        ry0 = _clip(Y0 - top_pad, 0, H - 1)
+        ry1 = _clip(Y1 + bottom_pad, 0, H - 1)
+        if rx1 <= rx0 or ry1 <= ry0:
+            continue
+
+        roi = g[ry0:ry1, rx0:rx1]
+
+        try:
+            den = cv2.fastNlMeansDenoising(roi, None, 10, 7, 21)
+            thr = cv2.adaptiveThreshold(
+                den, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 31, 15
+            )
+        except Exception:
+            thr = roi
+
+        # OCR เฉพาะตัวเลขกับเครื่องหมาย +
+        data = None
+        try:
+            data = pytesseract.image_to_data(
+                _PIL_Image.fromarray(thr),
+                lang="eng", 
+                config="--oem 3 --psm 7 -c tessedit_char_whitelist=0123456789+＋",
+                output_type=pytesseract.Output.DICT,
+            )
+        except Exception:
+            data = None
+
+        if not data:
+            continue
+
+        txts = [ (data["text"][i] or "").strip() for i in range(len(data.get("text", []))) ]
+        joined = " ".join(t for t in txts if t)
+        if not joined:
+            continue
+
+        if re.search(r"(?<!\w)3\s*[\+\＋](?!\w)", joined):
+            size_pt = (ry1 - ry0) / max(1.0, z)
+            size_mm = _pt_to_mm(size_pt)
+
+            out.append({
+                "text": "3+",
+                "bold": None,
+                "italic": None,
+                "underline": None,
+                "size_mm": size_mm,
+                "size_unit": "mm",
+                "font": "",
+                "source": "ocr",
+                "level": "line",
+            })
+
+    return out
+
 def extract_text_by_page(pdf_path, enable_ocr=True, ocr_lang="eng+tha", ocr_only_suspect_pages=True,
                          ocr_lang_fast=None, ocr_lang_full=None):
     
@@ -502,7 +703,7 @@ def extract_text_by_page(pdf_path, enable_ocr=True, ocr_lang="eng+tha", ocr_only
                             it["underline"] = True
                             break
 
-            # --- รวมเป็น line-items ต่อบรรทัด ---
+            # รวมเป็น line-items ต่อบรรทัด 
             for __idxs in line_groups:
                 if not __idxs:
                     continue
@@ -538,17 +739,57 @@ def extract_text_by_page(pdf_path, enable_ocr=True, ocr_lang="eng+tha", ocr_only
             page_items = [dict(it) for it in raw_spans]
 
             try:
-                plus_boxes = _detect_vector_plus_signs(page)
-                if plus_boxes:
-                    synth = _synthesize_3plus_items_from_vectors(raw_spans, plus_boxes, proximity_pt=14.0)
-                    if synth:
-                        page_items = _dedup_extend_items(page_items, synth)
+                if not _page_has_3plus_text(page_items):
+                    plus_boxes_vec = _detect_vector_plus_signs(page)
+                    if plus_boxes_vec:
+                        synth_vec = _synthesize_3plus_items_from_vectors(raw_spans, plus_boxes_vec, proximity_pt=14.0)
+                        if synth_vec:
+                            page_items = _dedup_extend_items(page_items, synth_vec)
+
+                    plus_boxes_tok = _find_token_plus_boxes_from_spans(raw_spans)
+                    if plus_boxes_tok:
+                        synth_tok = _synthesize_3plus_items_from_tokens(raw_spans, proximity_pt=14.0)
+                        if synth_tok:
+                            page_items = _dedup_extend_items(page_items, synth_tok)
+
+                    if not _page_has_3plus_text(page_items):
+                        anchors = (plus_boxes_vec or []) + (plus_boxes_tok or [])
+                        if anchors:
+                            def _center(b):
+                                return ((b[0] + b[2]) / 2.0, (b[1] + b[3]) / 2.0)
+
+                            three_boxes = []
+                            for it in raw_spans:
+                                if (it.get("source") or "pdf") == "pdf" and (it.get("text") or "").strip() == "3" and it.get("bbox"):
+                                    three_boxes.append(tuple(it["bbox"]))
+                            for it in page_items:
+                                if (it.get("text") or "").strip() == "3" and it.get("bbox"):
+                                    three_boxes.append(tuple(it["bbox"]))
+
+                            def _score(box):
+                                x0, y0, x1, y1 = box
+                                area = max(1e-6, (x1 - x0) * (y1 - y0))
+                                cx, cy = _center(box)
+                                if three_boxes:
+                                    d = min((((cx - _center(tb)[0]) ** 2) + ((cy - _center(tb)[1]) ** 2)) ** 0.5 for tb in three_boxes)
+                                else:
+                                    d = 1e3  
+                                return (d, -area)
+
+                            anchors_sorted = sorted(anchors, key=_score)
+
+                            # จำกัดจำนวน anchor เพื่อคุมเวลา (พอสำหรับหลายเคส 3+)
+                            anchors_top = anchors_sorted[:4]
+
+                            roi_items = _ocr_3plus_via_roi(page, anchors_top, zoom=4.0)
+                            if roi_items:
+                                page_items = _dedup_extend_items(page_items, roi_items)
+
             except Exception:
                 pass
 
-            # ---- OCR fallback ----
+            # OCR fallback 
             if enable_ocr:
-                # 1) เงื่อนไข OCR: ถ้ามีภาพ ให้ OCR เสมอ (กันพลาด text-on-image)
                 has_images = False
                 try:
                     has_images = bool(page.get_images(full=True))
@@ -562,7 +803,6 @@ def extract_text_by_page(pdf_path, enable_ocr=True, ocr_lang="eng+tha", ocr_only
                     do_ocr = not (enough_items and has_readable_size)
 
                 if do_ocr:
-                    # FAST: เร็วขึ้นด้วยซูม/คอนฟิกเบา + ลด conf ให้ 35 (เดิม 45 ทำให้พลาด)
                     fast_zooms   = [2.6, 3.0]
                     fast_cfgs    = [
                         "--oem 3 --psm 6 -c preserve_interword_spaces=1",
@@ -576,7 +816,6 @@ def extract_text_by_page(pdf_path, enable_ocr=True, ocr_lang="eng+tha", ocr_only
                         configs=fast_cfgs
                     )
 
-                    # พิจารณาว่า "ยังไม่พอ" → ค่อยขยับเป็น FULL เฉพาะหน้านี้
                     need_full = False
                     if not ocr_items:
                         need_full = True
@@ -603,6 +842,18 @@ def extract_text_by_page(pdf_path, enable_ocr=True, ocr_lang="eng+tha", ocr_only
 
                     if ocr_items:
                         page_items = _dedup_extend_items(page_items, ocr_items)
+
+                    # หลังรวม OCR แล้ว ลอง join '3' และ '+' ที่อยู่ชิดกันเป็น '3+'
+                    try:
+                        if not _page_has_3plus_text(page_items):
+                            has3 = any((it.get("text") or "").strip() == "3" for it in page_items)
+                            hasPlus = any((it.get("text") or "").strip() in {"+", "＋"} for it in page_items)
+                            if has3 and hasPlus:
+                                synth_join = _join_adjacent_3_plus(page_items)
+                                if synth_join:
+                                    page_items = _dedup_extend_items(page_items, synth_join)
+                    except Exception:
+                        pass
 
             for it in page_items:
                 it.pop("bbox", None)
