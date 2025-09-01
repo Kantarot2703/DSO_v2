@@ -17,7 +17,6 @@ def _norm_text(s: str) -> str:
     return s.strip().lower()
 
 def _fuzzy_match(a: str, b: str, threshold=0.85) -> bool:
-    """ True ถ้า similarity >= threshold """
     return difflib.SequenceMatcher(None, _norm_text(a), _norm_text(b)).ratio() >= threshold
 
 def check_term_in_page(term, page_items, rule):

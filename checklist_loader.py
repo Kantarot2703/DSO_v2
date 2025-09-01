@@ -268,12 +268,13 @@ def fuzzy_find_columns(df):
     return term_col, lang_col, spec_col
 
 _FULL2HALF = str.maketrans({
-    "＋": "+", "－": "-", "％": "%", "＝": "=", "＊": "*", "／": "/",
+    "＋": "+", "﹢": "+", "⁺": "+", "₊": "+", "➕": "+", 
+    "－": "-", "％": "%", "＝": "=", "＊": "*", "／": "/",
     "＇": "'", "＂": '"', "＆": "&", "｜": "|", "＃": "#", "＠": "@",
     "（": "(", "）": ")", "［": "[", "］": "]", "｛": "{", "｝": "}",
     "，": ",", "．": ".", "：": ":", "；": ";", "！": "!", "？": "?",
     "～": "~", "＾": "^", "｀": "`", "＿": "_", "＜": "<", "＞": ">",
-    "　": " ",  # full-width space → space
+    "　": " ", 
 })
 
 def normalize_text(text: str) -> str:
@@ -829,10 +830,16 @@ def start_check(df_checklist, extracted_text_list):
 
     artwork_pages = []
     page_mapping  = {}
+
     for real_idx, page_items in enumerate(extracted_text_list):
-        if is_artwork_page(page_items):
+        consider = is_artwork_page(page_items)
+        if not consider and doc_has_any_partno and real_idx > 0:
+            consider = True
+        if not consider and (not doc_has_any_partno) and real_idx > 0:
+            consider = True
+        if consider:
             artwork_pages.append(page_items)
-            page_mapping[len(artwork_pages)] = real_idx + 1  
+            page_mapping[len(artwork_pages)] = real_idx + 1
 
     logger.info(
         "📄 Pages considered: %d (real pages: %s)",
@@ -896,14 +903,18 @@ def start_check(df_checklist, extracted_text_list):
         for c in det_codes:
             code_pages_map[c].add(real_no)
 
-    # --- helper แปลงรายชื่อหน้า All Pages 
+    # แปลงรายชื่อหน้า All Pages 
     def _format_pages_for_output(found_pages):
-        artwork_set = set(page_mapping.values())  
+        artwork_set = set(page_mapping.values())
         p = sorted(set(int(x) for x in (found_pages or [])) & artwork_set)
-        if p and set(p) == artwork_set:
+        if not artwork_set:
+            return ", ".join(str(x) for x in p) if p else "-"
+
+        coverage = (len(p) / max(1, len(artwork_set)))
+        if coverage >= 0.90:
             return "All Pages"
         return ", ".join(str(x) for x in p) if p else "-"
-    
+
     # --- helper: log หลักฐานการตรวจ สำหรับ term หนึ่งแถว ---
     def _log_evidence(term_text, spec_text, found_pages_list, matched_items, thr_mm, max_size_mm, page_str):
         pdf_hits = sum(1 for i in matched_items if (i.get("source") or "pdf").lower() != "ocr")
@@ -1175,8 +1186,8 @@ def start_check(df_checklist, extracted_text_list):
 
             for chunk in primary:
                 if re.search(r"\b(or|หรือ)\b", chunk, flags=re.I):
-                    for seg in re.split(r"\b(?:or|หรือ)\b", chunk, flags=re.I):
-                        seg = seg.strip(" ,/").strip()
+                    for seg in re.split(r"[\/,•·∙・／]+", chunk):
+                        seg = seg.strip()
                         if seg:
                             parts.append(seg)
                     continue
@@ -1209,7 +1220,7 @@ def start_check(df_checklist, extracted_text_list):
             age_pat = None
             if m_age:
                 n = m_age.group(1)
-                age_pat = re.compile(rf"\b{re.escape(n)}\s*[\+\＋]\b")
+                age_pat = re.compile(rf"(?<!\w){re.escape(n)}\s*[\+\＋](?!\w)")
             
             risky = _is_risky_term(variant_norm)
             matched_items, pages = [], []
