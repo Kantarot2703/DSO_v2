@@ -78,6 +78,12 @@ def _dedup_notes(notes):
         out.append(s)
     return out
 
+def _dash_norm(x):
+    s = "" if x is None else str(x).strip()
+    if s == "" or s.lower() in {"-", "–", "—", "none", "nan"}:
+        return "-"
+    return s
+
 def _is_all_caps_approx(s: str) -> bool:
     s = _ud.normalize("NFKC", str(s or ""))
     letters = [ch for ch in s if ch.isalpha()]
@@ -1039,11 +1045,12 @@ def start_check(df_checklist, extracted_text_list):
                         "Term": "-",
                         "Remark": remark_text or "-",
                         "Remark URL": remark_link or "-",
-                        "Found": "❌ Not Found",
-                        "Match": "❌",
+                        "Found": "-",
+                        "Match": "-",
                         "Pages": "-",
                         "Font Size": "-",
-                        "Note": "-",
+                        "Note": "Manual check required",
+                        "Verification": "Manual",
                         "Package Panel": package_panel,
                         "Procedure": procedure,
                         "__Term_HTML__": row.get("__Term_HTML__", ""),

@@ -16,6 +16,19 @@ def handle_start_check(self):
     self.result_table.setColumnCount(len(result_df.columns))
     self.result_table.setHorizontalHeaderLabels(result_df.columns.tolist())
 
+    hdr = self.result_table.horizontalHeader()
+    hdr.setStyleSheet("""
+    QHeaderView::section {
+        background-color: #EDEDED;      /* เทาอ่อน */
+        border-top: 1px solid #BFBFBF;
+        border-bottom: 1px solid #BFBFBF;
+        border-right: 1px solid #BFBFBF; /* เส้นแบ่งคอลัมน์ */
+        border-left: 0px;                /* กันเส้นทับกันให้หนาเกิน */
+        padding: 6px;
+    }
+    """)
+    self.result_table.setShowGrid(True) 
+
     for row_idx, (_, row) in enumerate(result_df.iterrows()):
         for col_idx, value in enumerate(row):
             item = QtWidgets.QTableWidgetItem(str(value))

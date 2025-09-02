@@ -1,7 +1,9 @@
-import os, re, logging
+import os, logging
+import re 
 import pandas as pd
 import unicodedata as _ud
 import html as _html
+import html
 from PyQt5.QtWidgets import QWidget, QLabel, QHBoxLayout, QVBoxLayout, QGridLayout, QHeaderView
 from PyQt5.QtCore import Qt, QUrl
 from PyQt5 import QtWidgets, QtGui, QtCore
@@ -167,7 +169,7 @@ class DSOApp(QtWidgets.QWidget):
         self.pdf_btn = QtWidgets.QPushButton("📄 Upload PDF (Artwork)")
         self.excel_btn = QtWidgets.QPushButton("📋 Upload Excel (Checklist)")
         self.pdf_label = QtWidgets.QLabel("PDF: Not selected")
-        self.excel_label = QtWidgets.QLabel("Checklist: Not selected")
+        self.excel_label = QtWidgets.QLabel("Excel: Not selected")
         self.pdf_btn.clicked.connect(self.load_pdf)
         self.excel_btn.clicked.connect(self.load_excel)
         file_layout.addWidget(self.pdf_btn)
@@ -177,6 +179,7 @@ class DSOApp(QtWidgets.QWidget):
         # Search bar
         search_layout = QtWidgets.QHBoxLayout()
         self.search_input = QtWidgets.QLineEdit()
+        self.search_input.returnPressed.connect(self.search_text)
         self.search_input.setPlaceholderText("Search term ...")
         self.search_btn = QtWidgets.QPushButton("Search")
         self.search_btn.clicked.connect(self.search_text)
@@ -350,11 +353,34 @@ class DSOApp(QtWidgets.QWidget):
         pt = self.result_table.font().pointSize()
         return max(8, pt if pt > 0 else 10)
 
-    def _wrap_html_with_table_font(self, html: str) -> str:
-        cleaned = re.sub(r'font-(?:size|family)\s*:\s*[^;"\']+;?', '', html or "", flags=re.I)
-        pt = self._table_font_pt()
-        family = self.result_table.font().family()
-        return f'<div style="font-family:{family}; font-size:{pt}pt;">{cleaned}</div>'
+    def _wrap_html_with_table_font(self, body_html: str) -> str:
+        f = self.result_table.font()
+        fam  = f.family()
+        size = f.pointSizeF() if f.pointSizeF() > 0 else float(f.pointSize() or 10)
+        weight = "bold" if f.bold() else "normal"
+
+        css = f"""
+        <style>
+        html, body {{
+            margin:0; padding:0;
+            font-family: "{fam}";
+            font-size: {size:.2f}pt;
+            font-weight: {weight};
+            color: #000;
+        }}
+        p, div, span {{
+            font-family: "{fam}";
+            font-size: {size:.2f}pt;
+            font-weight: {weight};
+            color: #000;
+        }}
+        a {{
+            color: #1a73e8;               /* สีลิงก์ */
+            text-decoration: underline;   /* ลิงก์จริงเท่านั้นที่ขีดเส้นใต้ */
+        }}
+        </style>
+        """
+        return f"<html><head>{css}</head><body>{body_html or ''}</body></html>"
     
     def _wrap_all_as_link(self, inner_html: str, url: str) -> str:
         if not url:
@@ -392,7 +418,9 @@ class DSOApp(QtWidgets.QWidget):
     def _remark_pairs_to_html(self, text: str, inner_w: int, fm: QtGui.QFontMetrics) -> str:
         esc = _html.escape
         t = str(text or "").replace("\r", "\n").strip()
-        if not t:
+        t_no_ws = re.sub(r"[ \t\f\v\u00A0]", "", t)
+        t_no_ws = t_no_ws.replace("–", "-").replace("—", "-")
+        if t_no_ws == "" or set(t_no_ws) <= {"-"}:            
             return "-"
 
         # จับคู่ทั่วไป "LEFT = RIGHT" (ยืดหยุ่น ครอบคลุมอักขระยุโรป)
@@ -401,7 +429,6 @@ class DSOApp(QtWidgets.QWidget):
         def fmt_pair(left: str, right: str) -> str:
             left, right = left.strip(), right.strip()
             one_line = f"{left} = {right}"
-            # ถ้าใกล้เต็มคอลัมน์แล้ว (≥92%) ให้ตัดขึ้นบรรทัดใหม่หลัง '='
             if fm.horizontalAdvance(one_line) >= int(inner_w * 0.92):
                 return f"{esc(left)} =<br/>{esc(right)}"
             return esc(one_line)
@@ -539,9 +566,18 @@ class DSOApp(QtWidgets.QWidget):
 
     def display_results(self, df: pd.DataFrame):
         df_src = df.copy()
+
         symbol_cols_protect = {"Symbol/ Exact wording", "Symbol/Exact wording", "__Term_HTML__"}
         cols_to_fill = [c for c in df.columns if c not in symbol_cols_protect]
         df[cols_to_fill] = df[cols_to_fill].fillna("-")
+
+        def _dashify(x):
+            s = str(x).strip()
+            return "-" if s in ("", "-", "–", "—", "None", "none", "nan", "NaN", "null", "Null") else s
+
+        for col in ["Found", "Match", "Font Size", "Pages", "Note", "Remark", "Package Panel", "Procedure"]:
+            if col in df.columns:
+                df[col] = df[col].apply(_dashify)
 
         preferred = ["Verification", "Requirement", "Symbol/ Exact wording", "Specification", 
                     "Found", "Match", "Font Size", "Pages", "Note", 
@@ -570,16 +606,21 @@ class DSOApp(QtWidgets.QWidget):
         self.result_table.setColumnCount(len(df_ui.columns))
         self.result_table.setHorizontalHeaderLabels(df_ui.columns.tolist())
 
-        # ทำหัวคอลัมน์ทั้งหมดเป็นเทาอ่อน
+        # ให้หัวคอลัมน์เป็นเทาอ่อน และคงเส้นแบ่งคอลัมน์ไว้
+        self.result_table.setShowGrid(True)
         self.result_table.horizontalHeader().setStyleSheet("""
         QHeaderView::section {
-            background-color: #EAEAEA;   
+            background-color: #EDEDED;
             color: black;
             padding: 6px;
-            border: 0px;
+            border-top: 1px solid #BFBFBF;
+            border-bottom: 1px solid #BFBFBF;
+            border-right: 1px solid #BFBFBF;  
+            border-left: 0px;                  
         }
         QHeaderView::section:first {
-            background-color: #EEF3FF; 
+            border-left: 1px solid #BFBFBF;    
+            background-color: #EEF3FF;        
         }
         """)
 
@@ -621,7 +662,7 @@ class DSOApp(QtWidgets.QWidget):
         if "Specification" in df_ui.columns:
             self.result_table.setColumnWidth(df_ui.columns.get_loc("Specification"), equal_width)
         if "Symbol/ Exact wording" in df_ui.columns:
-            self.result_table.setColumnWidth(df_ui.columns.get_loc("Symbol/ Exact wording"), 380)
+            self.result_table.setColumnWidth(df_ui.columns.get_loc("Symbol/ Exact wording"), 350)
         if "Package Panel" in df_ui.columns:
             self.result_table.setColumnWidth(df_ui.columns.get_loc("Package Panel"), equal_width)
         if "Procedure" in df_ui.columns:
@@ -948,7 +989,6 @@ class DSOApp(QtWidgets.QWidget):
 
                                 img_vbox.addWidget(lbl, 0, QtCore.Qt.AlignHCenter | QtCore.Qt.AlignVCenter)
 
-
                             if not display_text.strip():
                                 outer.addStretch(1)
                                 outer.addWidget(img_wrap, 0, QtCore.Qt.AlignHCenter | QtCore.Qt.AlignVCenter)
@@ -969,13 +1009,19 @@ class DSOApp(QtWidgets.QWidget):
 
                 # Remark คอลัมน์เดียว แต่คลิกได้ถ้ามีลิงก์จาก Excel; ถ้าไม่มีให้ linkify/หรือ "-" ; จัดกึ่งกลาง 
                 if header == "Remark":
-                    url = str(row_src.get("Remark URL", "") or row_src.get("Remark Link", "") or "").strip()
+                    URL_RE = re.compile(r'(https?://[^\s<>"\')]+|www\.[^\s<>"\')]+)', re.IGNORECASE)
+
+                    url_from_col = str(row_src.get("Remark URL", "") or row_src.get("Remark Link", "") or "").strip()
                     txt = (str(value) if value is not None else "").strip()
+
+                    if (txt in ("", "-", "–", "—")) and (not url_from_col):
+                        self.result_table.setItem(row_idx, col_idx, QtWidgets.QTableWidgetItem("-"))
+                        continue
 
                     # container + layout
                     rwrap = QtWidgets.QWidget()
                     rlay = QtWidgets.QVBoxLayout(rwrap)
-                    rlay.setContentsMargins(6, 2, 6, 2) 
+                    rlay.setContentsMargins(6, 2, 6, 2)
                     rlay.setSpacing(0)
 
                     lbl = QtWidgets.QLabel()
@@ -984,47 +1030,50 @@ class DSOApp(QtWidgets.QWidget):
                     lbl.setTextInteractionFlags(QtCore.Qt.TextBrowserInteraction)
                     lbl.setAlignment(QtCore.Qt.AlignHCenter | QtCore.Qt.AlignVCenter)
                     lbl.setWordWrap(True)
-                    lbl.linkActivated.connect(lambda u: QDesktopServices.openUrl(QUrl(u)))
                     lbl.setFont(self.result_table.font())
                     lbl.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Preferred)
+                    lbl.setStyleSheet("QLabel { padding: 0; margin: 0; }")
 
-                    # ให้กว้างเท่าคอลัมน์จริง เพื่อไม่ให้บีบ
+                    # คำนวณความกว้างภายใน
                     col_w   = self.result_table.columnWidth(col_idx)
                     inner_w = max(40, col_w - 12)
                     fm = lbl.fontMetrics()
-                    
-                    # สร้าง HTML ตามกติกา (ตัด/ไม่ตัดตามความกว้าง)
-                    base_html = self._remark_pairs_to_html(txt, inner_w, fm)
 
-                    detected_url = None
-                    if url:
-                        detected_url = url.strip()
+                    URL_RX = re.compile(r'(https?://[^\s<>"\')]+|www\.[^\s<>"\')]+)')
+
+                    # linkify เฉพาะช่วงที่เป็น URL จริง
+                    def _linkify_plain_to_html(s: str) -> str:
+                        if not s:
+                            return "-"
+                        s = s.replace("\r\n", "\n").replace("\r", "\n")
+                        parts = []
+                        last = 0
+                        for m in URL_RX.finditer(s):
+                            parts.append(html.escape(s[last:m.start()]))
+                            raw = m.group(1)
+                            href = raw if raw.lower().startswith(("http://","https://")) else ("http://" + raw)
+                            parts.append(f'<a href="{html.escape(href)}">{html.escape(raw)}</a>')
+                            last = m.end()
+                        parts.append(html.escape(s[last:]))
+                        return "<br>".join(p or "" for p in "".join(parts).split("\n")) or "-"
+
+                    plain_is_dash = (txt.strip() in {"", "-", "–", "—"})
+
+                    has_url_in_text = bool(URL_RX.search(txt)) if not plain_is_dash else False
+
+                    if has_url_in_text:
+                        content_html = _linkify_plain_to_html(txt)
                     else:
-                        m = re.search(r'(https?://[^\s<>"\')]+)', base_html)
-                        if not m:
-                            m = re.search(r'(www\.[^\s<>"\')]+)', base_html)
-                            if m:
-                                detected_url = "http://" + m.group(1)
-                        else:
-                            detected_url = m.group(1)
+                        content_html = "-" if plain_is_dash else html.escape(txt).replace("\n", "<br>")
 
-                    if detected_url:
-                        content_html = self._wrap_all_as_link(base_html, detected_url)
-                    else:
-                        content_html = base_html 
-
-                    # บังคับให้ใช้ฟอนต์ของตาราง
-                    lbl.setText(self._wrap_html_with_table_font(content_html))
-
+                    lbl.setText(content_html)
                     lbl.setMinimumWidth(inner_w)
                     lbl.setMaximumWidth(inner_w)
+
+                    # ควบคุม word-wrap ด้วยความกว้างจริง
                     plain = re.sub(r"<[^>]+>", "", content_html or "")
                     lbl.setWordWrap(fm.horizontalAdvance(plain) > inner_w if plain else True)
 
-                    # เผื่อบางสภาพแวดล้อม openExternalLinks ไม่ยิง ให้จับ signal สำรอง
-                    lbl.linkActivated.connect(lambda u: QDesktopServices.openUrl(QUrl(u)))
-                    
-                    # วางลง layout (ไม่ใส่ AlignCenter ที่ layout เพื่อให้ขยายเต็มความกว้าง)
                     rlay.addWidget(lbl)
                     self.result_table.setCellWidget(row_idx, col_idx, rwrap)
                     self._attach_row_select(rwrap, row_idx)
@@ -1056,8 +1105,9 @@ class DSOApp(QtWidgets.QWidget):
                     # Logic เดิมอื่น ๆ (ยังคงไว้)
                     elif header == "Match" and match.startswith("❌"):
                         item.setForeground(QColor("red"))
-                    elif header == "Font Size" and not font_size.startswith("✔"):
-                        item.setForeground(QColor("red"))
+                    elif header == "Font Size":
+                        if found.startswith("❌") and not font_size.startswith("✔"):
+                            item.setForeground(QColor("red"))
                     elif header == "Note" and note.strip() not in ["-", ""]:
                         item.setForeground(QColor("red"))
 
