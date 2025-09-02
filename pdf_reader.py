@@ -124,6 +124,101 @@ def _merge_bbox_px(b1, b2):
         max(b1[3], b2[3]),
     ]
 
+# helpers to remove colored overlay lines and detect plus shape
+def _remove_colored_lines(rgb_roi):
+    if cv2 is None or np is None:
+        return rgb_roi
+
+    roi = rgb_roi
+    H, W = roi.shape[:2]
+
+    hsv = cv2.cvtColor(roi, cv2.COLOR_RGB2HSV)
+    h, s, v = cv2.split(hsv)
+    sat_mask = (s > 110).astype(np.uint8) * 255              
+    val_mask = ((v > 40) & (v < 245)).astype(np.uint8) * 255 
+    m1 = cv2.bitwise_and(sat_mask, val_mask)
+
+    g   = cv2.cvtColor(roi, cv2.COLOR_RGB2GRAY)
+    k3  = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
+    whitehat = cv2.morphologyEx(g, cv2.MORPH_TOPHAT,   k3)
+    blackhat = cv2.morphologyEx(g, cv2.MORPH_BLACKHAT, k3)
+    _, m2a = cv2.threshold(whitehat, 0, 255, cv2.THRESH_BINARY | cv2.THRESH_OTSU)
+    _, m2b = cv2.threshold(blackhat, 0, 255, cv2.THRESH_BINARY | cv2.THRESH_OTSU)
+    m2 = cv2.bitwise_or(m2a, m2b)
+
+    edges = cv2.Canny(g, 60, 160)
+    m3 = np.zeros_like(g)
+    try:
+        lines = cv2.HoughLinesP(
+            edges, 1, np.pi/180, threshold=25,
+            minLineLength=max(6, int(0.12 * min(H, W))),
+            maxLineGap=3
+        )
+        if lines is not None:
+            for x1, y1, x2, y2 in lines[:, 0, :]:
+                cv2.line(m3, (x1, y1), (x2, y2), 255, 2)
+    except Exception:
+        pass
+
+    mask = cv2.bitwise_or(m1, cv2.bitwise_or(m2, m3))
+
+    k = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
+    mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN,  k, iterations=1)
+    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, k, iterations=1)
+
+    ratio = float(mask.sum()) / (255.0 * max(1, H * W))
+    if ratio > 0.35:
+        mask = cv2.erode(mask, k, iterations=1)
+
+    if mask.sum() == 0:
+        return roi
+
+    cleaned = cv2.inpaint(roi, mask, 3, cv2.INPAINT_TELEA)
+    return cleaned
+
+def _detect_plus_by_hough(gray_roi):
+    if cv2 is None or np is None:
+        return False
+    try:
+        edges = cv2.Canny(gray_roi, 60, 160)
+        lines = cv2.HoughLinesP(edges, 1, np.pi/180, threshold=25, minLineLength=6, maxLineGap=3)
+        
+        if lines is None:
+            return False
+
+        H, W = gray_roi.shape[:2]
+        cx, cy = W/2.0, H/2.0
+
+        horizontals, verticals = [], []
+        for x1, y1, x2, y2 in lines[:,0,:]:
+            dx, dy = x2-x1, y2-y1
+            length = (dx*dx + dy*dy)**0.5
+            if length < 6:  
+                continue
+            ang = abs(np.degrees(np.arctan2(dy, dx)))
+            if ang <= 15:  
+                horizontals.append((x1, y1, x2, y2))
+            elif ang >= 75:  
+                verticals.append((x1, y1, x2, y2))
+
+        if not horizontals or not verticals:
+            return False
+
+        for hx1, hy1, hx2, hy2 in horizontals:
+            hx0, hx1b = min(hx1, hx2), max(hx1, hx2)
+            hy = (hy1 + hy2)/2.0
+
+            for vx1, vy1, vx2, vy2 in verticals:
+                vx = (vx1 + vx2)/2.0
+                vy0, vy1b = min(vy1, vy2), max(vy1, vy2)
+
+                if (hx0 <= vx <= hx1b) and (vy0 <= hy <= vy1b):
+                    if abs(vx - cx) <= 0.35*W and abs(hy - cy) <= 0.35*H:
+                        return True
+        return False
+    except Exception:
+        return False
+
 def _group_ocr_words_into_lines(ocr_words):
     if not ocr_words:
         return []
@@ -336,35 +431,74 @@ def _ocr_extract_items(page, ocr_lang="eng+tha", zooms=None, conf_threshold=30, 
     items.extend(line_items)
     return items
 
-def _detect_vector_plus_signs(page, min_len=2.5, max_len=40.0, center_tol=1.5, length_ratio_tol=0.45):
+def _detect_vector_plus_signs(page, min_len=2.5, max_len=None,
+                              center_tol=None, length_ratio_tol=0.55):
+    if page is None:
+        return []
+
+    try:
+        pw = float(page.rect.width)
+        ph = float(page.rect.height)
+        diag = (pw * pw + ph * ph) ** 0.5
+    except Exception:
+        pw, ph, diag = 595.0, 842.0, 1024.0 
+
+    if max_len is None:
+        max_len = max(40.0, 0.25 * pw)
+
+    if center_tol is None:
+        center_tol = max(0.8, 0.01 * diag)
+
     Hs, Vs = [], []
+
     try:
         for d in page.get_drawings():
             for it in d.get("items", []):
                 op = it[0]
+
+                # เคสเส้นตรง 
                 if op == "l":
                     p0, p1 = it[1], it[2]
                     dx, dy = p1.x - p0.x, p1.y - p0.y
-                    length = (dx*dx + dy*dy) ** 0.5
+                    length = (dx * dx + dy * dy) ** 0.5
                     if length < min_len or length > max_len:
                         continue
-                    if abs(dy) <= 0.8:
-                        x0, x1 = sorted([p0.x, p1.x])
+
+                    # ใช้มุมเพื่อจัดแนว
+                    if abs(dy) <= 0.8:  
+                        x0, x1 = sorted((p0.x, p1.x))
                         y = (p0.y + p1.y) / 2.0
                         Hs.append((x0, y, x1))
-                    elif abs(dx) <= 0.8:
-                        y0, y1 = sorted([p0.y, p1.y])
+                    elif abs(dx) <= 0.8:  
+                        y0, y1 = sorted((p0.y, p1.y))
                         x = (p0.x + p1.x) / 2.0
                         Vs.append((x, y0, y1))
+
+                elif op == "re":
+                    rect = it[1]
+                    w = float(rect.width)
+                    h = float(rect.height)
+                    x0, y0, x1, y1 = rect.x0, rect.y0, rect.x1, rect.y1
+
+                    thin = max(6.0, 0.006 * diag)
+
+                    if h <= thin and w >= min_len and w <= max_len:
+                        yc = (y0 + y1) / 2.0
+                        Hs.append((x0, yc, x1))
+
+                    elif w <= thin and h >= min_len and h <= max_len:
+                        xc = (x0 + x1) / 2.0
+                        Vs.append((xc, y0, y1))
     except Exception:
         return []
 
     plus_boxes = []
     for (hx0, hy, hx1) in Hs:
-        hcx  = (hx0 + hx1) / 2.0
+        hcx = (hx0 + hx1) / 2.0
         hlen = (hx1 - hx0)
+
         for (vx, vy0, vy1) in Vs:
-            vcy  = (vy0 + vy1) / 2.0
+            vcy = (vy0 + vy1) / 2.0
             vlen = (vy1 - vy0)
 
             if abs(vx - hcx) <= center_tol and abs(vcy - hy) <= center_tol:
@@ -373,8 +507,9 @@ def _detect_vector_plus_signs(page, min_len=2.5, max_len=40.0, center_tol=1.5, l
                     if ratio <= length_ratio_tol:
                         x0, x1 = min(hx0, vx), max(hx1, vx)
                         y0, y1 = min(vy0, hy), max(vy1, hy)
-                        pad = 1.2
+                        pad = max(1.2, 0.003 * diag)
                         plus_boxes.append((x0 - pad, y0 - pad, x1 + pad, y1 + pad))
+
     return plus_boxes
 
 def _synthesize_3plus_items_from_vectors(raw_spans, plus_boxes, proximity_pt=14.0):
@@ -542,23 +677,20 @@ def _ocr_3plus_via_roi(page, plus_boxes, zoom=4.0):
     if not plus_boxes or pytesseract is None or cv2 is None or np is None:
         return out
 
-    # เรนเดอร์ครั้งเดียว ใช้ซ้ำทุก ROI
     img_pil, z = _render_page_to_pil(page, zoom=zoom)
-    g = np.array(img_pil.convert("L"))
+    rgb = np.array(img_pil.convert("RGB"))
+    gray = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)
+    H, W = gray.shape[:2]
 
-    H, W = g.shape[:2]
-
-    # ช่วยตัดพิกัดให้อยู่ในภาพ
     def _clip(v, lo, hi): 
         return max(lo, min(int(v), hi))
 
     for (x0, y0, x1, y1) in plus_boxes:
         X0, Y0, X1, Y1 = x0 * z, y0 * z, x1 * z, y1 * z
-        w = max(1.0, X1 - X0)
-        h = max(1.0, Y1 - Y0)
+        w = max(1.0, X1 - X0); h = max(1.0, Y1 - Y0)
 
-        left_pad   = 2.2 * w 
-        right_pad  = 0.8 * w
+        left_pad   = 2.2 * w
+        right_pad  = 0.9 * w
         top_pad    = 0.9 * h
         bottom_pad = 0.9 * h
 
@@ -569,50 +701,137 @@ def _ocr_3plus_via_roi(page, plus_boxes, zoom=4.0):
         if rx1 <= rx0 or ry1 <= ry0:
             continue
 
-        roi = g[ry0:ry1, rx0:rx1]
+        roi_rgb = rgb[ry0:ry1, rx0:rx1].copy()
+        roi_rgb = _remove_colored_lines(roi_rgb)
+        roi_g   = cv2.cvtColor(roi_rgb, cv2.COLOR_RGB2GRAY)
 
+        candidates = [roi_g]
         try:
-            den = cv2.fastNlMeansDenoising(roi, None, 10, 7, 21)
-            thr = cv2.adaptiveThreshold(
-                den, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 31, 15
-            )
+            den = cv2.fastNlMeansDenoising(roi_g, None, 10, 7, 21)
+            thr = cv2.adaptiveThreshold(den, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+                                        cv2.THRESH_BINARY, 31, 15)
+            inv = 255 - thr
+            k3  = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
+            close = cv2.morphologyEx(thr, cv2.MORPH_CLOSE, k3, iterations=1)
+            candidates += [thr, inv, close]
         except Exception:
-            thr = roi
+            pass
 
-        # OCR เฉพาะตัวเลขกับเครื่องหมาย +
-        data = None
-        try:
-            data = pytesseract.image_to_data(
-                _PIL_Image.fromarray(thr),
-                lang="eng", 
-                config="--oem 3 --psm 7 -c tessedit_char_whitelist=0123456789+＋",
-                output_type=pytesseract.Output.DICT,
-            )
-        except Exception:
-            data = None
+        hit = False
+        for img in candidates:
+            try:
+                data = pytesseract.image_to_data(
+                    _PIL_Image.fromarray(img),
+                    lang="eng",
+                    config="--oem 3 --psm 7 -c tessedit_char_whitelist=0123456789+＋",
+                    output_type=pytesseract.Output.DICT,
+                )
+            except Exception:
+                data = None
+            if not data:
+                continue
+            joined = " ".join([(data["text"][i] or "").strip()
+                               for i in range(len(data.get("text", []))) if (data["text"][i] or "").strip()])
+            if re.search(r"(?<!\w)3\s*[\+\＋](?!\w)", joined) or ("+" in joined or "＋" in joined):
+                size_pt = (ry1 - ry0) / max(1.0, z)
+                size_mm = _pt_to_mm(size_pt)
+                out.append({
+                    "text": "3+",
+                    "bold": None, "italic": None, "underline": None,
+                    "size_mm": size_mm, "size_unit": "mm", "font": "",
+                    "source": "ocr", "level": "line",
+                })
+                hit = True
+                break
 
-        if not data:
-            continue
-
-        txts = [ (data["text"][i] or "").strip() for i in range(len(data.get("text", []))) ]
-        joined = " ".join(t for t in txts if t)
-        if not joined:
-            continue
-
-        if re.search(r"(?<!\w)3\s*[\+\＋](?!\w)", joined):
+        if not hit and _detect_plus_by_hough(roi_g):
             size_pt = (ry1 - ry0) / max(1.0, z)
             size_mm = _pt_to_mm(size_pt)
-
             out.append({
                 "text": "3+",
-                "bold": None,
-                "italic": None,
-                "underline": None,
-                "size_mm": size_mm,
-                "size_unit": "mm",
-                "font": "",
-                "source": "ocr",
-                "level": "line",
+                "bold": None, "italic": None, "underline": None,
+                "size_mm": size_mm, "size_unit": "mm", "font": "",
+                "source": "ocr", "level": "line",
+            })
+
+    return out
+
+def _ocr_plus_next_to_three(page, three_boxes, zoom=4.0, max_targets=4):
+    out = []
+    if not three_boxes or pytesseract is None or cv2 is None or np is None:
+        return out
+
+    img_pil, z = _render_page_to_pil(page, zoom=zoom)
+    rgb = np.array(img_pil.convert("RGB"))
+    H, W = rgb.shape[:2]
+
+    tb = sorted(three_boxes, key=lambda b: (b[3]-b[1])*(b[2]-b[0]), reverse=True)[:max_targets]
+
+    def _clip(v, lo, hi): 
+        return max(lo, min(int(v), hi))
+
+    for (x0, y0, x1, y1) in tb:
+        X0, Y0, X1, Y1 = x0 * z, y0 * z, x1 * z, y1 * z
+        w = max(1.0, X1 - X0); h = max(1.0, Y1 - Y0)
+
+        rx0 = _clip(X1 - 0.2*w, 0, W-1)
+        rx1 = _clip(X1 + 1.4*w, 0, W-1)
+        ry0 = _clip(Y0 - 0.3*h, 0, H-1)
+        ry1 = _clip(Y1 + 0.3*h, 0, H-1)
+        if rx1 <= rx0 or ry1 <= ry0:
+            continue
+
+        roi_rgb = rgb[ry0:ry1, rx0:rx1].copy()
+        roi_rgb = _remove_colored_lines(roi_rgb)
+        roi_g   = cv2.cvtColor(roi_rgb, cv2.COLOR_RGB2GRAY)
+
+        candidates = [roi_g]
+        try:
+            den = cv2.fastNlMeansDenoising(roi_g, None, 10, 7, 21)
+            thr = cv2.adaptiveThreshold(den, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+                                        cv2.THRESH_BINARY, 31, 15)
+            inv = 255 - thr
+            k3  = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
+            close = cv2.morphologyEx(thr, cv2.MORPH_CLOSE, k3, iterations=1)
+            candidates += [thr, inv, close]
+        except Exception:
+            pass
+
+        hit = False
+        for img in candidates:
+            try:
+                data = pytesseract.image_to_data(
+                    _PIL_Image.fromarray(img),
+                    lang="eng",
+                    config="--oem 3 --psm 7 -c tessedit_char_whitelist=+＋",
+                    output_type=pytesseract.Output.DICT,
+                )
+            except Exception:
+                data = None
+            if not data:
+                continue
+            joined = " ".join([(data["text"][i] or "").strip()
+                               for i in range(len(data.get("text", []))) if (data["text"][i] or "").strip()])
+            if ("+" in joined) or ("＋" in joined):
+                size_pt = (ry1 - ry0) / max(1.0, z)
+                size_mm = _pt_to_mm(size_pt)
+                out.append({
+                    "text": "3+",
+                    "bold": None, "italic": None, "underline": None,
+                    "size_mm": size_mm, "size_unit": "mm", "font": "",
+                    "source": "ocr", "level": "line",
+                })
+                hit = True
+                break
+
+        if not hit and _detect_plus_by_hough(roi_g):
+            size_pt = (ry1 - ry0) / max(1.0, z)
+            size_mm = _pt_to_mm(size_pt)
+            out.append({
+                "text": "3+",
+                "bold": None, "italic": None, "underline": None,
+                "size_mm": size_mm, "size_unit": "mm", "font": "",
+                "source": "ocr", "level": "line",
             })
 
     return out
@@ -752,38 +971,38 @@ def extract_text_by_page(pdf_path, enable_ocr=True, ocr_lang="eng+tha", ocr_only
                         if synth_tok:
                             page_items = _dedup_extend_items(page_items, synth_tok)
 
-                    if not _page_has_3plus_text(page_items):
-                        anchors = (plus_boxes_vec or []) + (plus_boxes_tok or [])
-                        if anchors:
-                            def _center(b):
-                                return ((b[0] + b[2]) / 2.0, (b[1] + b[3]) / 2.0)
+                    three_boxes = []
+                    for it in raw_spans:
+                        if (it.get("source") or "pdf") == "pdf" and (it.get("text") or "").strip() == "3" and it.get("bbox"):
+                            three_boxes.append(tuple(it["bbox"]))
+                    for it in page_items:
+                        if (it.get("text") or "").strip() == "3" and it.get("bbox"):
+                            three_boxes.append(tuple(it["bbox"]))
 
-                            three_boxes = []
-                            for it in raw_spans:
-                                if (it.get("source") or "pdf") == "pdf" and (it.get("text") or "").strip() == "3" and it.get("bbox"):
-                                    three_boxes.append(tuple(it["bbox"]))
-                            for it in page_items:
-                                if (it.get("text") or "").strip() == "3" and it.get("bbox"):
-                                    three_boxes.append(tuple(it["bbox"]))
-
-                            def _score(box):
-                                x0, y0, x1, y1 = box
-                                area = max(1e-6, (x1 - x0) * (y1 - y0))
+                    anchors = (plus_boxes_vec or []) + (plus_boxes_tok or [])
+                    if anchors:
+                        def _center(b): return ((b[0]+b[2])/2.0, (b[1]+b[3])/2.0)
+                        def _score(box):
+                            x0, y0, x1, y1 = box
+                            area = max(1e-6, (x1 - x0) * (y1 - y0))
+                            if three_boxes:
                                 cx, cy = _center(box)
-                                if three_boxes:
-                                    d = min((((cx - _center(tb)[0]) ** 2) + ((cy - _center(tb)[1]) ** 2)) ** 0.5 for tb in three_boxes)
-                                else:
-                                    d = 1e3  
-                                return (d, -area)
+                                d = min((((cx - _center(tb)[0]) ** 2) + ((cy - _center(tb)[1]) ** 2)) ** 0.5 for tb in three_boxes)
+                            else:
+                                d = 1e3
+                            return (d, -area) 
 
-                            anchors_sorted = sorted(anchors, key=_score)
+                        anchors_sorted = sorted(anchors, key=_score)
+                        anchors_top = anchors_sorted[:4] 
 
-                            # จำกัดจำนวน anchor เพื่อคุมเวลา (พอสำหรับหลายเคส 3+)
-                            anchors_top = anchors_sorted[:4]
+                        roi_items = _ocr_3plus_via_roi(page, anchors_top, zoom=4.0)
+                        if roi_items:
+                            page_items = _dedup_extend_items(page_items, roi_items)
 
-                            roi_items = _ocr_3plus_via_roi(page, anchors_top, zoom=4.0)
-                            if roi_items:
-                                page_items = _dedup_extend_items(page_items, roi_items)
+                    if not _page_has_3plus_text(page_items) and three_boxes:
+                        roi_from_three = _ocr_plus_next_to_three(page, three_boxes, zoom=4.0, max_targets=4)
+                        if roi_from_three:
+                            page_items = _dedup_extend_items(page_items, roi_from_three)
 
             except Exception:
                 pass
@@ -852,6 +1071,22 @@ def extract_text_by_page(pdf_path, enable_ocr=True, ocr_lang="eng+tha", ocr_only
                                 synth_join = _join_adjacent_3_plus(page_items)
                                 if synth_join:
                                     page_items = _dedup_extend_items(page_items, synth_join)
+                    except Exception:
+                        pass
+
+                    try:
+                        if not _page_has_3plus_text(page_items):
+                            three_boxes_ocr = [
+                            tuple(it[bbox])
+                            for it in page_items
+                            if (it.get("source") or "").lower() == "ocr"
+                                and (it.get("text") or "").strip() == "3"
+                                and it.get("bbox") is not None
+                            ]
+                            if three_boxes_ocr:
+                                roi_from_three = _ocr_plus_next_to_three(page, three_boxes_ocr, zoom=4.0, max_targets=6)
+                                if roi_from_three:
+                                    page_items = _dedup_extend_items(page_items, roi_from_three)
                     except Exception:
                         pass
 

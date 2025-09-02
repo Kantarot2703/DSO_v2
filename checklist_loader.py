@@ -1207,7 +1207,7 @@ def start_check(df_checklist, extracted_text_list):
                             parts.append(seg)
                     continue
 
-                for seg in re.split(r"[\/,]", chunk):
+                for seg in re.split(r"[\/,•·∙・／\u2022\u00B7]+", chunk):
                     seg = seg.strip()
                     if seg:
                         parts.append(seg)
@@ -1289,8 +1289,10 @@ def start_check(df_checklist, extracted_text_list):
                 ), reverse=True)
             
             # Page level fallback กรณีข้อความโดนตัดบรรทัดเลยไม่อยู่ใน item เดียว
-            if not pages_set and len(words) >= 2:
+            if len(words) >= 2:
                 for pno, ptxt in page_norm_text.items():
+                    if pno in pages_set:
+                        continue
                     if _tokens_in_order(words, ptxt):
                         pages_set.add(pno)
 

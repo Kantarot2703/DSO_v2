@@ -1,6 +1,31 @@
 import pandas as pd
 import unicodedata as _ud
 import difflib
+import re
+
+
+#  Accent-insensitive helpers
+_LATIN_TRANSLATE = str.maketrans({
+    "＋": "+", "・": "•", "／": "/", "‚": ",", "‐": "-", "–": "-", "—": "-",
+    "“": '"', "”": '"', "’": "'", "´": "'", "`": "'",
+})
+
+_SEP_RE = re.compile(r"[ \t\u00A0./\\|•·;,:\-]+") 
+
+def _is_latin_text(s: str) -> bool:
+    return bool(re.search(r"[A-Za-z]", s or ""))
+
+def _latin_fold(s: str) -> str:
+    s = (s or "").translate(_LATIN_TRANSLATE)
+    s = _ud.normalize("NFKD", s)
+    s = "".join(ch for ch in s if not _ud.combining(ch))
+    s = s.lower()
+    s = _SEP_RE.sub(" ", s)
+    return re.sub(r"\s+", " ", s).strip()
+
+def _flex_tokens(term: str):
+    toks = [t for t in _SEP_RE.split(term or "") if t]
+    return toks
 
 def is_all_caps(text):
     return text == text.upper() and any(c.isalpha() for c in text)
@@ -22,6 +47,8 @@ def _fuzzy_match(a: str, b: str, threshold=0.85) -> bool:
 def check_term_in_page(term, page_items, rule):
     results = []
     tnorm = _norm_text(term)
+    is_latin = _is_latin_text(term)
+    tnorm_fold = _latin_fold(term) if is_latin else ""
 
     for item in page_items:
         text = item.get("text", "")
@@ -29,10 +56,16 @@ def check_term_in_page(term, page_items, rule):
 
         # ----- การพบคำ -----
         found = False
+        txt_norm = _norm_text(text)
+
         if src == "ocr":
-            found = (tnorm in _norm_text(text)) or _fuzzy_match(term, text, threshold=0.88)
+            found = (tnorm in txt_norm) or _fuzzy_match(term, text, threshold=0.88)
+            if not found and is_latin:
+                found = (tnorm_fold in _latin_fold(text)) or _fuzzy_match(tnorm_fold, _latin_fold(text), threshold=0.85)
         else:
-            found = (tnorm in _norm_text(text))
+            found = (tnorm in txt_norm)
+            if not found and is_latin:
+                found = (tnorm_fold in _latin_fold(text))
 
         if not found:
             continue
