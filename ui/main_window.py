@@ -1112,7 +1112,6 @@ class DSOApp(QtWidgets.QWidget):
                         item.setForeground(QColor("red"))
 
                 self.result_table.setItem(row_idx, col_idx, item)
-
             self.result_table.resizeRowsToContents()
 
     def _on_column_resized(self, logicalIndex: int, oldSize: int, newSize: int):
