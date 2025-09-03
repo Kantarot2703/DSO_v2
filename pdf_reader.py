@@ -1077,7 +1077,7 @@ def extract_text_by_page(pdf_path, enable_ocr=True, ocr_lang="eng+tha", ocr_only
                     try:
                         if not _page_has_3plus_text(page_items):
                             three_boxes_ocr = [
-                            tuple(it[bbox])
+                            tuple(it["bbox"])
                             for it in page_items
                             if (it.get("source") or "").lower() == "ocr"
                                 and (it.get("text") or "").strip() == "3"

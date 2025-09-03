@@ -4,7 +4,7 @@ import pandas as pd
 import unicodedata as _ud
 import html as _html
 import html
-from PyQt5.QtWidgets import QWidget, QLabel, QHBoxLayout, QVBoxLayout, QGridLayout, QHeaderView
+from PyQt5.QtWidgets import QWidget, QLabel, QHBoxLayout, QVBoxLayout, QGridLayout, QHeaderView, QTableWidgetSelectionRange
 from PyQt5.QtCore import Qt, QUrl
 from PyQt5 import QtWidgets, QtGui, QtCore
 from ui.pdf_viewer import PDFViewer
@@ -15,11 +15,13 @@ from result_exporter import export_result_to_excel
 from PyQt5.QtGui import QColor, QIcon, QPixmap, QDesktopServices
 from pdf_reader import extract_product_info_by_page
 from collections import defaultdict
+from ui.pdf_viewer import PDFViewer
+
 
 
 APP_ICON_PATH = os.path.join("assets", "app", "dso_icon.ico")
 
-# --- OCR Language sets ---
+# OCR Language sets
 LANG_SUPERSET = "eng+spa+fra+por+ita+deu+nld+swe+fin+dan+nor+pol+ces+slk+hun+rus+ell+tur+ara+jpn+chi_sim+tha"
 
 PART_OCR_MAP_FAST = {
@@ -35,7 +37,7 @@ PART_OCR_MAP_FAST = {
     "DC1": "eng+fra+deu+ita+nld+spa+por",
 }
 
-#  ตรงตามสเปกภาษาของแต่ละ Part 
+# สเปกภาษาของแต่ละ Part 
 PART_OCR_MAP_FULL = {
     "4LB":  "eng+spa+fra+por",
     "DOM":  "eng",
@@ -180,6 +182,7 @@ class DSOApp(QtWidgets.QWidget):
         search_layout = QtWidgets.QHBoxLayout()
         self.search_input = QtWidgets.QLineEdit()
         self.search_input.returnPressed.connect(self.search_text)
+        self.search_input.textChanged.connect(self._on_search_text_changed)
         self.search_input.setPlaceholderText("Search term ...")
         self.search_btn = QtWidgets.QPushButton("Search")
         self.search_btn.clicked.connect(self.search_text)
@@ -189,13 +192,28 @@ class DSOApp(QtWidgets.QWidget):
         # Result Table
         self.result_table = QtWidgets.QTableWidget()
         self.result_table.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
+        self.result_table.setSelectionMode(QtWidgets.QAbstractItemView.ExtendedSelection)  # << เพิ่มบรรทัดนี้
         self.result_table.setColumnCount(0)
         self.result_table.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
+        self.result_table.setWordWrap(True)
+        self.result_table.verticalHeader().setSectionResizeMode(QtWidgets.QHeaderView.ResizeToContents)
         self.result_table.horizontalHeader().setStretchLastSection(False)
         self.result_table.horizontalHeader().setSectionResizeMode(QtWidgets.QHeaderView.Interactive)
-        
+
         self.hovered_row = -1
         self.result_table.setMouseTracking(True)
+        self.result_table.setProperty("searchMode", False)
+        self.result_table.setStyleSheet(
+            (self.result_table.styleSheet() or "") + """
+        QTableWidget[searchMode="true"]::item:selected {
+            background: transparent;
+            color: inherit;
+        }
+        """
+        )
+
+        self.result_table.cellClicked.connect(self._on_table_cell_clicked)
+        self.result_table.cellDoubleClicked.connect(self._on_table_cell_double_clicked)
         self.result_table.viewport().installEventFilter(self)
         self.result_table.itemSelectionChanged.connect(self.update_row_highlight)
         self.result_table.horizontalHeader().sectionResized.connect(self._on_column_resized)
@@ -231,6 +249,24 @@ class DSOApp(QtWidgets.QWidget):
                 self.update_row_highlight()
         return super().eventFilter(source, event)
     
+    def _set_hide_selection_overlay_during_search(self, hide: bool):
+        self.result_table.setProperty("searchMode", bool(hide))
+        self.result_table.style().unpolish(self.result_table)
+        self.result_table.style().polish(self.result_table)
+        self.result_table.viewport().update()
+
+    def _select_entire_row(self, row: int):
+        if row < 0 or row >= self.result_table.rowCount():
+            return
+        sm = self.result_table.selectionModel()
+        if sm:
+            sm.clearSelection()
+            left  = self.result_table.model().index(row, 0)
+            right = self.result_table.model().index(row, self.result_table.columnCount()-1)
+            sel = QtCore.QItemSelection(left, right)
+            sm.select(sel, QtCore.QItemSelectionModel.ClearAndSelect | QtCore.QItemSelectionModel.Rows)
+            self.result_table.setCurrentIndex(left)
+    
     class _RowClickFilter(QtCore.QObject):
         def __init__(self, table, row, parent=None):
             super().__init__(parent)
@@ -238,7 +274,6 @@ class DSOApp(QtWidgets.QWidget):
             self._row = row
         def eventFilter(self, obj, event):
             if event.type() == QtCore.QEvent.MouseButtonPress:
-                # ถ้าคลิกที่ QLabel ที่มีลิงก์ → ปล่อยให้ QLabel จัดการเอง
                 if isinstance(obj, QtWidgets.QLabel):
                     try:
                         t = (obj.text() or "").lower()
@@ -246,7 +281,6 @@ class DSOApp(QtWidgets.QWidget):
                         t = ""
                     if "<a " in t or 'href="' in t:
                         return False
-                # อื่น ๆ → เลือกทั้งแถวตามปกติ
                 self._table.setCurrentCell(self._row, 0)
                 self._table.selectRow(self._row)
                 return False
@@ -291,7 +325,7 @@ class DSOApp(QtWidgets.QWidget):
         verif_col = self.get_column_index("Verification")
 
         sel_hex = self.palette().color(QtGui.QPalette.Highlight).name()
-        V_BG = "#F3F6FF" 
+        V_BG = "#EDEDED" 
 
         def paint_cell(row, col, bg_hex):
             it = self.result_table.item(row, col)
@@ -314,7 +348,6 @@ class DSOApp(QtWidgets.QWidget):
             is_selected = self.result_table.selectionModel().isRowSelected(row, QtCore.QModelIndex())
             is_hovered  = (row == self.hovered_row)
 
-            # ตรวจว่าคือ Manual หรือไม่ (ดูจาก data(UserRole) หรือข้อความ)
             is_manual = False
             if verif_col != -1:
                 verif_item = self.result_table.item(row, verif_col)
@@ -325,19 +358,17 @@ class DSOApp(QtWidgets.QWidget):
                     elif isinstance(verif_item.text(), str) and verif_item.text().strip().lower() == "manual":
                         is_manual = True
 
-            # กำหนดพื้นหลัง "ฐาน" ของทั้งแถว
+            # กำหนดพื้นหลังฐานของทั้งแถว
             if is_selected:
                 base_bg = sel_hex
             else:
                 if is_manual:
-                    base_bg = Y_HOVER if is_hovered else Y_ROW  # เหลืองอ่อน
+                    base_bg = Y_HOVER if is_hovered else Y_ROW 
                 else:
                     base_bg = G_HOVER if is_hovered else "white"
 
-            # ทาแต่ละเซลล์ในแถวนั้น
             for col in range(self.result_table.columnCount()):
                 cell_bg = base_bg
-                # คอลัมน์ Verification ใช้พื้นหลังของตนเอง (ถ้าไม่ได้ select แถว)
                 if (col == verif_col) and (not is_selected):
                     cell_bg = V_BG if not is_manual else Y_ROW
                 paint_cell(row, col, cell_bg)
@@ -349,6 +380,58 @@ class DSOApp(QtWidgets.QWidget):
                 return col
         return -1
     
+    def _collect_symbol_labels(self):
+        sym_idx = self.get_column_index("Symbol/ Exact wording")
+        if sym_idx < 0:
+            return []
+        out = []
+        for r in range(self.result_table.rowCount()):
+            cell = self.result_table.cellWidget(r, sym_idx)
+            if not cell:
+                continue
+            for lbl in cell.findChildren(QtWidgets.QLabel):
+                base = lbl.property("base_inner_html")
+                if isinstance(base, str):
+                    out.append((r, sym_idx, lbl))
+        return out
+
+    def _set_label_inner_html(self, lbl: QtWidgets.QLabel, inner_html: str):
+        lbl.setTextFormat(QtCore.Qt.RichText)
+        lbl.setText(self._wrap_html_with_table_font(inner_html or ""))
+
+    def _clear_symbol_highlight(self):
+        for _, _, lbl in self._collect_symbol_labels():
+            base = lbl.property("base_inner_html")
+            if isinstance(base, str):
+                self._set_label_inner_html(lbl, base)
+
+    def _apply_symbol_highlight(self, query: str) -> int:
+        if not query:
+            self._clear_symbol_highlight()
+            return -1
+
+        pat = re.compile(re.escape(query), flags=re.IGNORECASE)
+        first_row = -1
+
+        for r, c, lbl in self._collect_symbol_labels():
+            base = lbl.property("base_inner_html") or ""
+            def repl(m):
+                return f'<span style="background:#ffeb3b">{m.group(0)}</span>'
+            highlighted = pat.sub(repl, base)
+
+            if highlighted != base and first_row == -1:
+                first_row = r
+            self._set_label_inner_html(lbl, highlighted)
+
+        return first_row
+
+    def _on_search_text_changed(self, s: str):
+        text = (s or "").strip()
+        self._set_hide_selection_overlay_during_search(True)
+        self._apply_symbol_highlight(text)
+        if self.result_table.selectionModel():
+            self.result_table.selectionModel().clearSelection()
+    
     def _table_font_pt(self) -> int:
         pt = self.result_table.font().pointSize()
         return max(8, pt if pt > 0 else 10)
@@ -357,7 +440,6 @@ class DSOApp(QtWidgets.QWidget):
         f = self.result_table.font()
         fam  = f.family()
         size = f.pointSizeF() if f.pointSizeF() > 0 else float(f.pointSize() or 10)
-        weight = "bold" if f.bold() else "normal"
 
         css = f"""
         <style>
@@ -365,18 +447,18 @@ class DSOApp(QtWidgets.QWidget):
             margin:0; padding:0;
             font-family: "{fam}";
             font-size: {size:.2f}pt;
-            font-weight: {weight};
             color: #000;
         }}
         p, div, span {{
             font-family: "{fam}";
             font-size: {size:.2f}pt;
-            font-weight: {weight};
             color: #000;
         }}
+        b, strong {{ font-weight: bold !important; }}
+        u {{ text-decoration: underline !important; }}
         a {{
-            color: #1a73e8;               /* สีลิงก์ */
-            text-decoration: underline;   /* ลิงก์จริงเท่านั้นที่ขีดเส้นใต้ */
+            color: #1a73e8;
+            text-decoration: underline;
         }}
         </style>
         """
@@ -419,7 +501,7 @@ class DSOApp(QtWidgets.QWidget):
         esc = _html.escape
         t = str(text or "").replace("\r", "\n").strip()
         t_no_ws = re.sub(r"[ \t\f\v\u00A0]", "", t)
-        t_no_ws = t_no_ws.replace("–", "-").replace("—", "-")
+        t_no_ws = t_no_ws.replace("–", "-").replace("—", "-").replace("=", "")
         if t_no_ws == "" or set(t_no_ws) <= {"-"}:            
             return "-"
 
@@ -573,7 +655,13 @@ class DSOApp(QtWidgets.QWidget):
 
         def _dashify(x):
             s = str(x).strip()
-            return "-" if s in ("", "-", "–", "—", "None", "none", "nan", "NaN", "null", "Null") else s
+            if s == "":
+                return "-"
+            if s.lower() in {"none", "nan", "null"}:
+                return "-"
+            if re.fullmatch(r"[-–—=\s]+", s):
+                return "-"
+            return s
 
         for col in ["Found", "Match", "Font Size", "Pages", "Note", "Remark", "Package Panel", "Procedure"]:
             if col in df.columns:
@@ -615,12 +703,11 @@ class DSOApp(QtWidgets.QWidget):
             padding: 6px;
             border-top: 1px solid #BFBFBF;
             border-bottom: 1px solid #BFBFBF;
-            border-right: 1px solid #BFBFBF;  
-            border-left: 0px;                  
+            border-right: 1px solid #BFBFBF;
+            border-left: 0px;
         }
         QHeaderView::section:first {
-            border-left: 1px solid #BFBFBF;    
-            background-color: #EEF3FF;        
+            border-left: 1px solid #BFBFBF;
         }
         """)
 
@@ -629,7 +716,7 @@ class DSOApp(QtWidgets.QWidget):
             vcol = df_ui.columns.get_loc("Verification")
             head_item = QtWidgets.QTableWidgetItem("Verification")
             head_item.setForeground(QColor("black"))
-            head_item.setBackground(QColor("#F2F8F1")) 
+            head_item.setBackground(QColor("#EDEDED")) 
             head_item.setToolTip("Auto/Manual verification status")
             self.result_table.setHorizontalHeaderItem(vcol, head_item)
             self.result_table.setColumnWidth(vcol, 120)
@@ -690,7 +777,6 @@ class DSOApp(QtWidgets.QWidget):
         if "Note" in df_ui.columns:
             self.result_table.setColumnWidth(df_ui.columns.get_loc("Note"), 250)
 
-        # หลังจบลูปเติมแถว
         self.result_table.resizeRowsToContents()
 
         # แต่งสีคอลัมน์ Verification ให้สแกนง่าย
@@ -805,22 +891,20 @@ class DSOApp(QtWidgets.QWidget):
                     item.setFlags(QtCore.Qt.ItemIsSelectable | QtCore.Qt.ItemIsEnabled)
                     item.setTextAlignment(QtCore.Qt.AlignHCenter | QtCore.Qt.AlignVCenter)
 
-                    # ทำให้ "ตัวหนา" ทั้ง 3 สถานะ
                     f = item.font()
                     f.setBold(True)
                     item.setFont(f)
 
-                    # Verified=เขียว, Reject=แดง, Manual=ค่าเริ่มต้น
-                    if not is_manual:
-                        item.setForeground(QColor("#15803d") if ok else QColor("red"))
+                    item.setBackground(QtGui.QColor("#EDEDED"))
 
-                    # Tooltip อธิบายเหตุผล
+                    if not is_manual:
+                        item.setForeground(QColor("#15803d") if ok else QColor("red"))  
+
                     tip = f"Found: {found or '-'}\nMatch: {match or '-'}\nFont Size: {font_size or '-'}"
                     if is_manual:
                         tip += "\n— Manual check"
-                    item.setToolTip(tip)
 
-                    # เก็บแฟล็ก manual ให้ตัวไฮไลต์ใช้
+                    item.setToolTip(tip)
                     item.setData(QtCore.Qt.UserRole, "manual" if is_manual else "auto")
 
                     self.result_table.setItem(row_idx, col_idx, item)
@@ -912,14 +996,15 @@ class DSOApp(QtWidgets.QWidget):
                         plain_for_measure = re.sub(r"<[^>]+>", "", display_text or "")
 
                         if is_html_mode:
-                            safe_html = re.sub(r"\r\n|\r|\n", "<br/>", display_text or "")
-                            term_label.setTextFormat(QtCore.Qt.RichText)
-                            term_label.setText(self._wrap_html_with_table_font(safe_html))
+                            inner_html = re.sub(r"\r\n|\r|\n", "<br/>", display_text or "")
                         else:
-                            term_label.setTextFormat(QtCore.Qt.PlainText)
-                            term_label.setText(display_text or "")
-                            # บังคับขนาดให้เท่าตาราง (ไม่แตะความหนา/สี)
-                            term_label.setStyleSheet(term_label.styleSheet() + f" font-size:{self._table_font_pt()}pt;")
+                            inner_html = _html.escape((display_text or "").replace("\r", ""))
+                            inner_html = inner_html.replace("\n", "<br/>")
+
+                        term_label.setProperty("base_inner_html", inner_html)
+
+                        term_label.setTextFormat(QtCore.Qt.RichText)
+                        term_label.setText(self._wrap_html_with_table_font(inner_html))
 
                         # ความกว้างวัดการตัดบรรทัดคงเดิม
                         col_width = self.result_table.columnWidth(col_idx)
@@ -982,7 +1067,7 @@ class DSOApp(QtWidgets.QWidget):
                                 col_width = self.result_table.columnWidth(col_idx)
                                 max_img_w = max(40, col_width - 2 * IMG_SIDE_PADDING)
 
-                                # รูปทั่วไป: ขยายเกือบเต็มคอลัมน์, โลโก้/มาร์ก: จำกัดไม่ให้ใหญ่เกิน
+                                # รูปทั่วไปขยายเกือบเต็มคอลัมน์, โลโก้/มาร์ก: จำกัดไม่ให้ใหญ่เกิน
                                 target_w = min(LOGO_MAX_WIDTH_PX, max_img_w) if is_logo else int(max_img_w * 0.98)
                                 scaled = pm.scaledToWidth(max(1, target_w), QtCore.Qt.SmoothTransformation)
                                 lbl.setPixmap(scaled)
@@ -1007,15 +1092,19 @@ class DSOApp(QtWidgets.QWidget):
                         self.result_table.setRowHeight(row_idx, 28)
                     continue
 
-                # Remark คอลัมน์เดียว แต่คลิกได้ถ้ามีลิงก์จาก Excel; ถ้าไม่มีให้ linkify/หรือ "-" ; จัดกึ่งกลาง 
+                # Remark: จัดกึ่งกลางเสมอ + ตัดบรรทัดอัตโนมัติ
                 if header == "Remark":
-                    URL_RE = re.compile(r'(https?://[^\s<>"\')]+|www\.[^\s<>"\')]+)', re.IGNORECASE)
+                    URL_RX = re.compile(r'(https?://[^\s<>"\')]+|www\.[^\s<>"\')]+)', re.IGNORECASE)
 
                     url_from_col = str(row_src.get("Remark URL", "") or row_src.get("Remark Link", "") or "").strip()
                     txt = (str(value) if value is not None else "").strip()
 
-                    if (txt in ("", "-", "–", "—")) and (not url_from_col):
-                        self.result_table.setItem(row_idx, col_idx, QtWidgets.QTableWidgetItem("-"))
+                    # เคสเป็น "-" หรือว่าง และไม่มี URL → แสดง "-" กลางเซลล์
+                    if (txt in ("", "-", "–", "—", "=")) and (not url_from_col):
+                        item = QtWidgets.QTableWidgetItem("-")
+                        item.setFlags(QtCore.Qt.ItemIsSelectable | QtCore.Qt.ItemIsEnabled)
+                        item.setTextAlignment(QtCore.Qt.AlignHCenter | QtCore.Qt.AlignVCenter)
+                        self.result_table.setItem(row_idx, col_idx, item)
                         continue
 
                     # container + layout
@@ -1039,15 +1128,11 @@ class DSOApp(QtWidgets.QWidget):
                     inner_w = max(40, col_w - 12)
                     fm = lbl.fontMetrics()
 
-                    URL_RX = re.compile(r'(https?://[^\s<>"\')]+|www\.[^\s<>"\')]+)')
-
-                    # linkify เฉพาะช่วงที่เป็น URL จริง
                     def _linkify_plain_to_html(s: str) -> str:
                         if not s:
                             return "-"
                         s = s.replace("\r\n", "\n").replace("\r", "\n")
-                        parts = []
-                        last = 0
+                        parts, last = [], 0
                         for m in URL_RX.finditer(s):
                             parts.append(html.escape(s[last:m.start()]))
                             raw = m.group(1)
@@ -1057,20 +1142,25 @@ class DSOApp(QtWidgets.QWidget):
                         parts.append(html.escape(s[last:]))
                         return "<br>".join(p or "" for p in "".join(parts).split("\n")) or "-"
 
-                    plain_is_dash = (txt.strip() in {"", "-", "–", "—"})
-
-                    has_url_in_text = bool(URL_RX.search(txt)) if not plain_is_dash else False
+                    has_url_in_text = bool(URL_RX.search(txt)) if txt not in ("", "-", "–", "—") else False
 
                     if has_url_in_text:
                         content_html = _linkify_plain_to_html(txt)
                     else:
-                        content_html = "-" if plain_is_dash else html.escape(txt).replace("\n", "<br>")
+                        content_html = self._remark_pairs_to_html(txt, inner_w, fm)
 
-                    lbl.setText(content_html)
+                    if url_from_col and not has_url_in_text and content_html.strip() != "-":
+                        content_html = self._wrap_all_as_link(content_html, url_from_col)
+
+                    lbl.setText(self._wrap_html_with_table_font(content_html))
                     lbl.setMinimumWidth(inner_w)
                     lbl.setMaximumWidth(inner_w)
 
-                    # ควบคุม word-wrap ด้วยความกว้างจริง
+                    lbl.setProperty("raw_remark", txt)
+                    lbl.setProperty("has_url_in_text", has_url_in_text)
+                    lbl.setProperty("remark_url_from_col", url_from_col)
+
+                    # ควบคุม word-wrap ตามความกว้างจริง
                     plain = re.sub(r"<[^>]+>", "", content_html or "")
                     lbl.setWordWrap(fm.horizontalAdvance(plain) > inner_w if plain else True)
 
@@ -1098,11 +1188,9 @@ class DSOApp(QtWidgets.QWidget):
                     if header in ["Found", "Match", "Font Size", "Note"]:
                         item.setForeground(QColor("gray"))
                 else:
-                    # ถ้า Found เป็น Not Found → คอลัมน์ทั้งหมดแดง ยกเว้น Requirement
                     if found.startswith("❌") and header != "Requirement":
                         item.setForeground(QColor(RED_HEX))
 
-                    # Logic เดิมอื่น ๆ (ยังคงไว้)
                     elif header == "Match" and match.startswith("❌"):
                         item.setForeground(QColor("red"))
                     elif header == "Font Size":
@@ -1137,7 +1225,7 @@ class DSOApp(QtWidgets.QWidget):
                 if not isinstance(html, str):
                     continue
 
-                # รีสเกลข้อความ (ทั้ง Symbol และ Remark)
+                # รีสเกลข้อความทั้ง Symbol และ Remark
                 txt_plain = re.sub(r"<[^>]+>", "", html)
                 fm = lbl.fontMetrics()
                 lbl.setMinimumWidth(inner_w)
@@ -1146,7 +1234,17 @@ class DSOApp(QtWidgets.QWidget):
                 need_wrap = fm.horizontalAdvance(txt_plain) > inner_w if txt_plain else True
                 lbl.setWordWrap(need_wrap)
 
-            # รีสเกลรูป (มีเฉพาะคอลัมน์ Symbol/…)
+                raw = lbl.property("raw_remark")
+                if raw is not None and name == "remark":
+                    has_url = bool(lbl.property("has_url_in_text"))
+                    url_from_col = lbl.property("remark_url_from_col") or ""
+                    if not has_url:
+                        new_html = self._remark_pairs_to_html(str(raw), inner_w, fm)
+                        if url_from_col:
+                            new_html = self._wrap_all_as_link(new_html, url_from_col)
+                        lbl.setText(self._wrap_html_with_table_font(new_html))
+
+            # รีสเกลรูป เฉพาะคอลัมน์ Symbol
             for img_lbl in labels:
                 img_path = img_lbl.property("img_path")
                 if not img_path:
@@ -1166,60 +1264,58 @@ class DSOApp(QtWidgets.QWidget):
         export_result_to_excel(self.result_df)
 
     def preview_pdf(self):
-        if self.pdf_path:
-            term = self.search_input.text().strip()
-            if not term:
-                QtWidgets.QMessageBox.information(self, "Enter Term", "Please enter a term to highlight in PDF.")
-                return
-            viewer = PDFViewer(self.pdf_path, search_term=term, product_infos=getattr(self, "product_infos", []))
-            viewer.show()
-        else:
+        if not getattr(self, "pdf_path", None):
             QtWidgets.QMessageBox.warning(self, "No PDF", "Please upload a PDF first.")
+            return
+
+        term = (self.search_input.text() or "").strip()
+
+        infos = getattr(self, "product_infos", []) or []
+
+        viewer = PDFViewer(
+            pdf_path=self.pdf_path,
+            search_term=(term or None),
+            product_infos=infos,
+            per_word_highlight=True
+        )
+        self._pdf_viewer = viewer
+        viewer.show()
+
+    def _set_hide_selection_overlay_during_search(self, hide: bool):
+        self.result_table.setProperty("searchMode", bool(hide))
+        self.result_table.style().unpolish(self.result_table)
+        self.result_table.style().polish(self.result_table)
+        self.result_table.viewport().update()
+
+    def _on_table_cell_clicked(self, row: int, col: int):
+        self._set_hide_selection_overlay_during_search(False)
+
+    def _on_table_cell_double_clicked(self, row: int, col: int):
+        sel = self.result_table.selectionModel()
+        if sel and sel.isRowSelected(row, self.result_table.rootIndex()):
+            self.result_table.clearSelection()
 
     def search_text(self):
-        query = self.search_input.text().strip()
+        query = (self.search_input.text() or "").strip()
         if not query:
             QtWidgets.QMessageBox.information(self, "Search", "Please enter a term to search.")
             return
-
-        if not self.result_table or self.result_table.rowCount() == 0:
+        if self.result_table.rowCount() == 0:
             QtWidgets.QMessageBox.information(self, "Search", "No results to search.")
             return
 
-        q = query.lower()
+        first_row = self._apply_symbol_highlight(query)
+        if first_row >= 0:
+            self._set_hide_selection_overlay_during_search(False)
 
-        # helper: ตัดแท็ก HTML ออกจาก QLabel (RichText)
-        def _plain_text_from_html(s: str) -> str:
-            if not isinstance(s, str):
-                return ""
-            return re.sub(r"<[^>]+>", "", s).strip()
+            sym_idx = self.get_column_index("Symbol/ Exact wording")
+            if sym_idx < 0:
+                sym_idx = 0
+            index = self.result_table.model().index(first_row, sym_idx)
+            self.result_table.scrollTo(index, QtWidgets.QAbstractItemView.PositionAtCenter)
 
-        # ค้นหาทั้ง QTableWidgetItem และ cellWidget(QLabel)
-        for row in range(self.result_table.rowCount()):
-            for col in range(self.result_table.columnCount()):
-                hit = False
+            self._select_entire_row(first_row)
+            return
 
-                item = self.result_table.item(row, col)
-                if item:
-                    txt = item.text() or ""
-                    if q in txt.lower():
-                        hit = True
-
-                if not hit:
-                    w = self.result_table.cellWidget(row, col)
-                    if w:
-
-                        labels = w.findChildren(QtWidgets.QLabel)
-                        for lbl in labels:
-                            txt = _plain_text_from_html(lbl.text()).lower()
-                            if q in txt:
-                                hit = True
-                                break
-                            
-                if hit:
-                    self.result_table.setCurrentCell(row, col)
-                    index = self.result_table.model().index(row, col)
-                    self.result_table.scrollTo(index, QtWidgets.QAbstractItemView.PositionAtCenter)
-                    return
-
-        QtWidgets.QMessageBox.information(self, "Search", f"'{query}' not found in results.")
+        QtWidgets.QMessageBox.information(self, "Search", f"'{query}' not found in Symbol column.")
+        self._set_hide_selection_overlay_during_search(False)
