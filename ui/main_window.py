@@ -7,7 +7,7 @@ import html
 from PyQt5.QtWidgets import QWidget, QLabel, QHBoxLayout, QVBoxLayout, QGridLayout, QHeaderView, QTableWidgetSelectionRange
 from PyQt5.QtCore import Qt, QUrl
 from PyQt5 import QtWidgets, QtGui, QtCore
-from ui.pdf_viewer import PDFViewer
+from ui.pdf_viewer import PdfPreviewWindow
 from checklist_loader import load_checklist, start_check, extract_part_code_from_pdf
 from pdf_reader import extract_text_by_page
 from checker import check_term_in_page
@@ -15,7 +15,6 @@ from result_exporter import export_result_to_excel
 from PyQt5.QtGui import QColor, QIcon, QPixmap, QDesktopServices
 from pdf_reader import extract_product_info_by_page
 from collections import defaultdict
-from ui.pdf_viewer import PDFViewer
 
 
 
@@ -120,7 +119,7 @@ RED_HEX = "#ff1313"
 Y_ROW    = "#FFFACD"  
 Y_HOVER  = "#FCF4AF"  
 Y_SEL    = "#fff1b0"  
-G_HOVER  = "#eeeeee"
+G_HOVER  = "#F9F9F9"
 G_SEL    = "#dddddd"
 
 # Image sizing rules
@@ -199,6 +198,11 @@ class DSOApp(QtWidgets.QWidget):
         self.result_table.verticalHeader().setSectionResizeMode(QtWidgets.QHeaderView.ResizeToContents)
         self.result_table.horizontalHeader().setStretchLastSection(False)
         self.result_table.horizontalHeader().setSectionResizeMode(QtWidgets.QHeaderView.Interactive)
+        self.result_table.setShowGrid(True)
+        self.result_table.setStyleSheet(
+            (self.result_table.styleSheet() or "") +
+            " QTableView { gridline-color: #BFBFBF; }"
+        )
 
         self.hovered_row = -1
         self.result_table.setMouseTracking(True)
@@ -370,7 +374,7 @@ class DSOApp(QtWidgets.QWidget):
             for col in range(self.result_table.columnCount()):
                 cell_bg = base_bg
                 if (col == verif_col) and (not is_selected):
-                    cell_bg = V_BG if not is_manual else Y_ROW
+                    cell_bg = V_BG
                 paint_cell(row, col, cell_bg)
 
     def get_column_index(self, column_name):
@@ -817,7 +821,6 @@ class DSOApp(QtWidgets.QWidget):
                 return "-"
             return re.sub(r'(https?://[^\s]+)', r'<a href="\1">\1</a>', text)
 
-        # หา image path จาก self.checklist_df ด้วย (Requirement, Symbol/Exact wording)
         def _lookup_image_groups(requirement_text: str, term_text: str):
             if getattr(self, "checklist_df", None) is None:
                 return []
@@ -839,7 +842,6 @@ class DSOApp(QtWidgets.QWidget):
                         g = sub.iloc[0].get("Image_Groups_Resolved") or sub.iloc[0].get("Image_Groups", [])
                         groups = g or []
 
-            # ถ้าไม่เจอ และ term_text เป็น "-" ให้ fallback จับคู่ด้วย Requirement อย่างเดียว
             if not groups:
                 mask_r = (req_left == str(requirement_text).strip().lower())
                 sub_r = self.checklist_df[mask_r]
@@ -898,7 +900,9 @@ class DSOApp(QtWidgets.QWidget):
                     item.setBackground(QtGui.QColor("#EDEDED"))
 
                     if not is_manual:
-                        item.setForeground(QColor("#15803d") if ok else QColor("red"))  
+                        item.setForeground(QColor("#15803d") if ok else QColor("red"))
+                    else:
+                        item.setForeground(QColor("black"))
 
                     tip = f"Found: {found or '-'}\nMatch: {match or '-'}\nFont Size: {font_size or '-'}"
                     if is_manual:
@@ -1265,21 +1269,75 @@ class DSOApp(QtWidgets.QWidget):
 
     def preview_pdf(self):
         if not getattr(self, "pdf_path", None):
-            QtWidgets.QMessageBox.warning(self, "No PDF", "Please upload a PDF first.")
+            QtWidgets.QMessageBox.information(self, "Preview PDF", "กรุณาอัปโหลดไฟล์ PDF ก่อน")
+            return
+        if getattr(self, "checklist_df", None) is None:
+            QtWidgets.QMessageBox.information(self, "Preview PDF", "กรุณาอัปโหลดไฟล์ Checklist ก่อน")
             return
 
-        term = (self.search_input.text() or "").strip()
+        df = getattr(self, "result_df", None)
+        if df is None or df.empty:
+            QtWidgets.QMessageBox.information(self, "Preview PDF", "ยังไม่มีผลตรวจสำหรับพรีวิว กรุณากด Start Checking ก่อน")
+            return
 
-        infos = getattr(self, "product_infos", []) or []
+        rows = []
+        cols = df.columns.str.strip().tolist()
+        col_req   = "Requirement" if "Requirement" in cols else None
+        col_sym   = "Symbol/ Exact wording" if "Symbol/ Exact wording" in cols else None
+        col_found = "Found" if "Found" in cols else None
+        col_ver   = "Verification" if "Verification" in cols else None
+        col_pages = "Pages" if "Pages" in cols else None
 
-        viewer = PDFViewer(
-            pdf_path=self.pdf_path,
-            search_term=(term or None),
-            product_infos=infos,
-            per_word_highlight=True
-        )
-        self._pdf_viewer = viewer
-        viewer.show()
+        if not (col_sym and col_found):
+            QtWidgets.QMessageBox.information(self, "Preview PDF", "ไม่พบคอลัมน์ที่จำเป็น (Symbol/Exact wording, Found)")
+            return
+
+        for i, row in df.iterrows():
+            symbol = str(row.get(col_sym, "") or "").strip()
+            req    = str(row.get(col_req, "") or "").strip() if col_req else f"Row {i+1}"
+            found  = str(row.get(col_found, "") or "")
+            ver    = str(row.get(col_ver, "") or "").strip().lower() if col_ver else ""
+            pages  = str(row.get(col_pages, "") or "") if col_pages else ""
+
+            if not symbol or symbol == "-":
+                status = "manual" if ver == "manual" else "missing"
+            else:
+                if found.strip().startswith("✅"):
+                    status = "found"
+                elif ver == "manual":
+                    status = "manual"
+                else:
+                    status = "missing"
+
+            rows.append({
+                "id": int(i) if isinstance(i, (int,)) else len(rows),
+                "requirement": req,
+                "symbol": symbol,
+                "status": status,
+                "pages_spec": pages,
+            })
+
+        # ถ้ามีหน้าต่างพรีวิวเปิดอยู่แล้ว ให้โฟกัสแทนการเปิดใหม่
+        w = getattr(self, "_pdf_preview_win", None)
+        if isinstance(w, QtWidgets.QWidget) and w.isVisible():
+            w.activateWindow()
+            w.raise_()
+            return
+
+        # ถ้ามีอ้างอิงหน้าต่างเดิม ให้ปิดและเคลียร์ก่อน
+        if isinstance(w, QtWidgets.QWidget):
+            try:
+                w.close()
+            except Exception:
+                pass
+        self._pdf_preview_win = None
+
+        # เปิดหน้าต่างพรีวิวแบบ top-level ที่ย่อ/ขยายได้
+        self._pdf_preview_win = PdfPreviewWindow(pdf_path=self.pdf_path, rows=rows, parent=None)
+        self._pdf_preview_win.destroyed.connect(lambda: setattr(self, "_pdf_preview_win", None))
+        self._pdf_preview_win.show()
+        self._pdf_preview_win.activateWindow()
+        self._pdf_preview_win.raise_()
 
     def _set_hide_selection_overlay_during_search(self, hide: bool):
         self.result_table.setProperty("searchMode", bool(hide))

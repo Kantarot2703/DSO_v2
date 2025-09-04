@@ -552,10 +552,6 @@ def _synthesize_3plus_items_from_vectors(raw_spans, plus_boxes, proximity_pt=14.
     return items
 
 def _find_token_plus_boxes_from_spans(raw_spans):
-    """
-    ดึง bbox ของ '+'/'＋' ที่มาเป็นโทเคนจาก PDF text spans
-    ใช้เป็น anchor สำหรับ ROI-OCR เมื่อไม่มี '+' แบบเวกเตอร์
-    """
     boxes = []
     for it in raw_spans:
         if (it.get("source") or "pdf") != "pdf":
