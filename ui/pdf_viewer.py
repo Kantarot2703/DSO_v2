@@ -300,7 +300,6 @@ class PDFViewer(QWidget):
         return {"found": "✅", "missing": "❌", "manual": "🛠️"}.get(status, "•")
 
     def _flatten_exact_wording(self, text: str) -> str:
-        """รวมหลายบรรทัด/หลายภาษาเป็นบรรทัดเดียวคั่นด้วย ' | '"""
         text = (text or "").replace("\r", "")
         parts = [p.strip() for p in text.split("\n") if p.strip()]
         return " | ".join(parts) if parts else "-"

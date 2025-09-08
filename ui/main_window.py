@@ -121,6 +121,8 @@ Y_HOVER  = "#FCF4AF"
 Y_SEL    = "#fff1b0"  
 G_HOVER  = "#F9F9F9"
 G_SEL    = "#dddddd"
+SEL_ROW = "#E6F2FF" 
+
 
 # Image sizing rules
 LOGO_MAX_WIDTH_PX = 170       
@@ -191,7 +193,8 @@ class DSOApp(QtWidgets.QWidget):
         # Result Table
         self.result_table = QtWidgets.QTableWidget()
         self.result_table.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
-        self.result_table.setSelectionMode(QtWidgets.QAbstractItemView.ExtendedSelection)  # << เพิ่มบรรทัดนี้
+        self.result_table.setSelectionMode(QtWidgets.QAbstractItemView.ExtendedSelection)
+        self.result_table.setAlternatingRowColors(True)
         self.result_table.setColumnCount(0)
         self.result_table.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
         self.result_table.setWordWrap(True)
@@ -199,23 +202,26 @@ class DSOApp(QtWidgets.QWidget):
         self.result_table.horizontalHeader().setStretchLastSection(False)
         self.result_table.horizontalHeader().setSectionResizeMode(QtWidgets.QHeaderView.Interactive)
         self.result_table.setShowGrid(True)
-        self.result_table.setStyleSheet(
-            (self.result_table.styleSheet() or "") +
-            " QTableView { gridline-color: #BFBFBF; }"
-        )
-
-        self.hovered_row = -1
-        self.result_table.setMouseTracking(True)
         self.result_table.setProperty("searchMode", False)
         self.result_table.setStyleSheet(
             (self.result_table.styleSheet() or "") + """
-        QTableWidget[searchMode="true"]::item:selected {
+        QTableView { gridline-color: #BFBFBF; }
+
+        QTableWidget[searchMode="true"]::item:selected,
+        QTableView[searchMode="true"]::item:selected {
             background: transparent;
             color: inherit;
         }
+
+        QTableWidget::item:focus, QTableView::item:focus { outline: none; }
         """
         )
-
+        pal = self.result_table.palette()
+        pal.setColor(QtGui.QPalette.Highlight, QtGui.QColor(SEL_ROW))        
+        pal.setColor(QtGui.QPalette.HighlightedText, QtGui.QColor(Qt.black)) 
+        self.result_table.setPalette(pal)
+        self.hovered_row = -1
+        self.result_table.setMouseTracking(True)
         self.result_table.cellClicked.connect(self._on_table_cell_clicked)
         self.result_table.cellDoubleClicked.connect(self._on_table_cell_double_clicked)
         self.result_table.viewport().installEventFilter(self)
@@ -328,13 +334,16 @@ class DSOApp(QtWidgets.QWidget):
     def update_row_highlight(self):
         verif_col = self.get_column_index("Verification")
 
-        sel_hex = self.palette().color(QtGui.QPalette.Highlight).name()
-        V_BG = "#EDEDED" 
+        sel_hex = SEL_ROW
 
-        def paint_cell(row, col, bg_hex):
+        def paint_cell(row, col, bg_hex, is_selected):
             it = self.result_table.item(row, col)
             if it:
-                it.setBackground(QColor(bg_hex))
+                if is_selected:
+                    it.setBackground(QtGui.QBrush())
+                else:
+                    it.setBackground(QColor(bg_hex))
+
             w = self.result_table.cellWidget(row, col)
             if w:
                 w.setStyleSheet(
@@ -373,9 +382,7 @@ class DSOApp(QtWidgets.QWidget):
 
             for col in range(self.result_table.columnCount()):
                 cell_bg = base_bg
-                if (col == verif_col) and (not is_selected):
-                    cell_bg = V_BG
-                paint_cell(row, col, cell_bg)
+                paint_cell(row, col, cell_bg, is_selected)
 
     def get_column_index(self, column_name):
         for col in range(self.result_table.columnCount()):
@@ -702,9 +709,10 @@ class DSOApp(QtWidgets.QWidget):
         self.result_table.setShowGrid(True)
         self.result_table.horizontalHeader().setStyleSheet("""
         QHeaderView::section {
-            background-color: #EDEDED;
-            color: black;
-            padding: 6px;
+            background-color: #DCDCDC;  
+            color: #1F2937;             
+            font-weight: 600;
+            padding: 6px 8px;
             border-top: 1px solid #BFBFBF;
             border-bottom: 1px solid #BFBFBF;
             border-right: 1px solid #BFBFBF;
@@ -720,7 +728,6 @@ class DSOApp(QtWidgets.QWidget):
             vcol = df_ui.columns.get_loc("Verification")
             head_item = QtWidgets.QTableWidgetItem("Verification")
             head_item.setForeground(QColor("black"))
-            head_item.setBackground(QColor("#EDEDED")) 
             head_item.setToolTip("Auto/Manual verification status")
             self.result_table.setHorizontalHeaderItem(vcol, head_item)
             self.result_table.setColumnWidth(vcol, 120)
@@ -896,8 +903,6 @@ class DSOApp(QtWidgets.QWidget):
                     f = item.font()
                     f.setBold(True)
                     item.setFont(f)
-
-                    item.setBackground(QtGui.QColor("#EDEDED"))
 
                     if not is_manual:
                         item.setForeground(QColor("#15803d") if ok else QColor("red"))
@@ -1339,12 +1344,6 @@ class DSOApp(QtWidgets.QWidget):
         self._pdf_preview_win.activateWindow()
         self._pdf_preview_win.raise_()
 
-    def _set_hide_selection_overlay_during_search(self, hide: bool):
-        self.result_table.setProperty("searchMode", bool(hide))
-        self.result_table.style().unpolish(self.result_table)
-        self.result_table.style().polish(self.result_table)
-        self.result_table.viewport().update()
-
     def _on_table_cell_clicked(self, row: int, col: int):
         self._set_hide_selection_overlay_during_search(False)
 
@@ -1373,6 +1372,7 @@ class DSOApp(QtWidgets.QWidget):
             self.result_table.scrollTo(index, QtWidgets.QAbstractItemView.PositionAtCenter)
 
             self._select_entire_row(first_row)
+            self.update_row_highlight()
             return
 
         QtWidgets.QMessageBox.information(self, "Search", f"'{query}' not found in Symbol column.")
