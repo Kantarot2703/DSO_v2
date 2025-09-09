@@ -2,6 +2,7 @@ from typing import List, Dict, Optional
 from collections import OrderedDict
 import re
 import fitz
+import unicodedata as _ud
 from PyQt5 import QtWidgets, QtCore, QtGui
 from PyQt5.QtCore import Qt, QRectF, QTimer
 from PyQt5.QtGui import QPixmap, QPen, QColor, QBrush, QKeySequence
@@ -21,6 +22,9 @@ HIGHLIGHT_ALPHA = 80
 
 # แคชผลค้นหาในแต่ละหน้า
 DEFAULT_LRU_CAPACITY = 8
+
+_SPLIT_SEPS = r"[|;\/•·・\u2022\u2027／]+"     
+_SPACE_ALTS = ["\u00A0", "\u2009", "\u2002", "\u2003", "\u202F"]
 
 
 # ------------------------------ Helpers ------------------------------
@@ -56,7 +60,10 @@ def build_terms_from_symbol(symbol_text: str) -> List[str]:
     s = (symbol_text or "").replace("\r", "").strip()
     if not s or s == "-":
         return []
-    parts = re.split(r"[|;\n]+", s)
+
+    # แยกด้วย / • · | ; ・ และขึ้นบรรทัดใหม่
+    parts = re.split(_SPLIT_SEPS + r"|\n+", s)
+
     terms: List[str] = []
     seen = set()
     for p in parts:
@@ -66,14 +73,13 @@ def build_terms_from_symbol(symbol_text: str) -> List[str]:
         if t not in seen:
             seen.add(t)
             terms.append(t)
+
+        # ทางเลือกสำหรับ 3+
         if "3+" in t or t == "3+":
             for alt in ("3 +", "3＋"):
                 if alt not in seen:
-                    seen.add(alt)
-                    terms.append(alt)
+                    seen.add(alt); terms.append(alt)
     return terms
-
-_SPACE_ALTS = ["\u00A0", "\u2009", "\u2002", "\u2003", "\u202F"]  
 
 def _space_variants(term: str) -> List[str]:
     if " " not in term:
@@ -100,6 +106,23 @@ def rect_center_inside(target: fitz.Rect, container: fitz.Rect) -> bool:
     cx = (target.x0 + target.x1) * 0.5
     cy = (target.y0 + target.y1) * 0.5
     return (container.x0 <= cx <= container.x1) and (container.y0 <= cy <= container.y1)
+
+def _strip_accents(s: str) -> str:
+    if not s:
+        return ""
+    return "".join(ch for ch in _ud.normalize("NFKD", s) if not _ud.combining(ch))
+
+def _norm_token(s: str) -> str:
+    s = _strip_accents(s or "")
+    for sp in _SPACE_ALTS:
+        s = s.replace(sp, " ")
+    s = s.replace("­", "")       
+    s = re.sub(r"\s+", " ", s)
+    return s.strip().lower()
+
+def _is_punct_only(s: str) -> bool:
+    # ถ้าไม่พบตัวอักษร/ตัวเลขของสคริปต์หลัก ๆ ให้ถือว่าเป็นสัญลักษณ์ล้วน
+    return not re.search(r"[0-9A-Za-z\u0400-\u04FF\u0590-\u08FF\u0E00-\u0E7F\u2E80-\u9FFF]", s)
 
 # ------------------------------ Main Viewer ------------------------------
 class _ZoomableGraphicsView(QGraphicsView):
@@ -417,19 +440,112 @@ class PDFViewer(QWidget):
             self._cache.popitem(last=False)
         self._cache[page_no] = {}
         return self._cache[page_no]
+    
+    def _words_on_page(self, page) -> list:
+        raw = page.get_text("words") or []
+        words = []
+        for x0, y0, x1, y1, w, *_ in raw:
+            w = (w or "").strip()
+            if not w:
+                continue
+            is_punct = _is_punct_only(w)
+            if is_punct:
+                words.append(("", fitz.Rect(x0, y0, x1, y1), w, True))
+                continue
+            wn = _norm_token(w)
+            if not wn:
+                continue
+            words.append((wn, fitz.Rect(x0, y0, x1, y1), w, False))
+        return words
+    
+    def _search_term_by_words(self, page: fitz.Page, term: str) -> List[fitz.Rect]:
+        norm = _norm_token(term)
+        if not norm:
+            return []
+        tokens = [t for t in norm.split(" ") if t]    
+        if not tokens:
+            return []
+
+        words = self._words_on_page(page)
+        if not words:
+            return []
+
+        hits = []
+        n = len(words)
+        i = 0
+        while i < n:
+            j = 0
+            k = i
+            start_k = None
+            end_k = None
+            while j < len(tokens) and k < n:
+                wnorm, wrect, wraw, is_punct = words[k]
+
+                if is_punct:
+                    k += 1
+                    continue
+
+                joined = False
+                if k + 1 < n:
+                    wnorm2, wrect2, wraw2, is_punct2 = words[k + 1]
+                    if not is_punct2:
+                        join12 = (wnorm + wnorm2)
+                        if join12 == tokens[j]:
+                            if start_k is None:
+                                start_k = k
+                            end_k = k + 1
+                            j += 1
+                            k += 2
+                            joined = True
+                if joined:
+                    continue
+
+                if wnorm == tokens[j]:
+                    if start_k is None:
+                        start_k = k
+                    end_k = k
+                    j += 1
+                    k += 1
+                else:
+                    break
+
+            if j == len(tokens) and start_k is not None and end_k is not None:
+                union = None
+                for t in range(start_k, end_k + 1):
+                    union = words[t][1] if union is None else union | words[t][1]
+                pad = 2.5
+                union = fitz.Rect(union.x0 - pad, union.y0 - pad, union.x1 + pad, union.y1 + pad)
+                hits.append(union)
+                i = end_k + 1
+            else:
+                i += 1
+            
+        if not hits:
+            return []
+        cell = 8.0
+        uniq = []
+        seen = set()
+        for r in hits:
+            key = (int(r.x0 // cell), int(r.y0 // cell), int(r.x1 // cell), int(r.y1 // cell))
+            if key not in seen:
+                seen.add(key)
+                uniq.append(r)
+        return uniq
 
     def _search_term_on_page(self, page: fitz.Page, term: str) -> List[fitz.Rect]:
         try:
             rects = page.search_for(term) or []
-            if rects:
-                return rects
-            for alt in _space_variants(term):
-                if alt == term:
-                    continue
-                rects = page.search_for(alt) or []
-                if rects:
-                    return rects
-            return []
+            if not rects:
+                for sp in _SPACE_ALTS:
+                    tt = term.replace(" ", sp)
+                    if tt != term:
+                        rects = page.search_for(tt) or []
+                        if rects:
+                            break
+
+            if not rects:
+                rects = self._search_term_by_words(page, term) or []
+            return rects
         except Exception:
             return []
 

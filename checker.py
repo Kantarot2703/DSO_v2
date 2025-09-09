@@ -12,6 +12,31 @@ _LATIN_TRANSLATE = str.maketrans({
 
 _SEP_RE = re.compile(r"[ \t\u00A0./\\|•·;,:\-]+") 
 
+
+# ----- Font-size rules -----
+def _size_meets_threshold(measured_mm: float, required_mm: float) -> bool:
+    try:
+        m = float(measured_mm or 0.0)
+        r = float(required_mm or 0.0)
+    except Exception:
+        return False
+    return (m + 1e-6) >= r  
+
+FONT_SOFT_UPPER_REL = 0.15  
+FONT_SOFT_UPPER_ABS = 0.30
+
+def _oversize_warning(measured_mm: float, required_mm: float,
+                      rel: float = FONT_SOFT_UPPER_REL, abs_mm: float = FONT_SOFT_UPPER_ABS):
+    try:
+        m = float(measured_mm or 0.0)
+        r = float(required_mm or 0.0)
+    except Exception:
+        return (False, 0.0, 0.0)
+    u_soft = r * (1.0 + rel) + abs_mm
+    if m > u_soft:
+        return (True, m - u_soft, u_soft)
+    return (False, 0.0, u_soft)
+
 def _is_latin_text(s: str) -> bool:
     return bool(re.search(r"[A-Za-z]", s or ""))
 
@@ -91,9 +116,14 @@ def check_term_in_page(term, page_items, rule):
         if req_size is not None:
             try:
                 size_mm = float(item.get("size_mm") or 0)
-                if size_mm + 1e-6 < float(req_size):
+                req = float(req_size)
+                if (size_mm + 1e-6) < req:
                     matched = False
-                    reasons.append(f"Font size too small ({size_mm:.2f}mm < {float(req_size):.2f}mm)")
+                    reasons.append(f"Font size too small ({size_mm:.2f}mm < {req:.2f}mm)")
+                else:
+                    warn, diff, u_soft = _oversize_warning(size_mm, req)
+                    if warn:
+                        reasons.append(f"Oversize warning (+{diff:.2f}mm > soft upper {u_soft:.2f}mm)")
             except Exception:
                 pass
 

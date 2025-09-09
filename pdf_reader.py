@@ -45,6 +45,56 @@ def _x_overlap(a0, a1, b0, b1):
 def _pt_to_mm(pt: float) -> float:
     return (pt or 0.0) * 25.4 / 72.0
 
+# --- helpers for cap-height measurement ---
+CAP_HEIGHT_RATIO = 0.70 
+
+def _median(vals):
+    vals = [float(v) for v in vals if v is not None]
+    if not vals:
+        return 0.0
+    vals.sort()
+    n = len(vals)
+    m = n // 2
+    return vals[m] if (n % 2) == 1 else (vals[m - 1] + vals[m]) / 2.0
+
+def _span_visual_height_mm(span) -> float:
+    try:
+        bbox = span.get("bbox")
+        if bbox and len(bbox) == 4:
+            h_pt = float(bbox[3]) - float(bbox[1])
+            if h_pt > 0:
+                return _pt_to_mm(h_pt) * CAP_HEIGHT_RATIO
+        sz = float(span.get("size", 0) or 0)
+        if sz > 0:
+            return _pt_to_mm(sz) * CAP_HEIGHT_RATIO
+    except Exception:
+        pass
+    return 0.0
+
+def _capheight_from_search(page, span_bbox, prefer_chars: str) -> float:
+    try:
+        import fitz
+        bx = fitz.Rect(span_bbox)
+    except Exception:
+        return 0.0
+
+    wl = []
+    for ch in prefer_chars:
+        if ch not in wl:
+            wl.append(ch)
+
+    heights = []
+    for ch in wl:
+        try:
+            for r in page.search_for(ch, hit_max=2000):
+                if bx.contains(r) and (r.height <= (bx.height * 1.15)):
+                    heights.append(r.height)
+        except Exception:
+            continue
+
+    h_pt = _median(heights)
+    return _pt_to_mm(h_pt) if h_pt > 0 else 0.0
+
 def _render_page_to_pil(page, zoom=2.0):
     mat = fitz.Matrix(zoom, zoom)
     pix = page.get_pixmap(matrix=mat, alpha=False)
@@ -361,7 +411,7 @@ def _ocr_extract_items(page, ocr_lang="eng+tha", zooms=None, conf_threshold=30, 
                 "underline": None,
                 "size_pt": size_pt,
                 "size_mm": size_mm,
-                "size_unit": "pt",
+                "size_unit": "mm",
                 "font": "",
                 "bbox": bbox_pt,
                 "bbox_px": (x, y, x+w, y+h),
@@ -406,22 +456,29 @@ def _ocr_extract_items(page, ocr_lang="eng+tha", zooms=None, conf_threshold=30, 
         for w in ln["words"]:
             try: size_mm = max(size_mm, float(w.get("size_mm") or 0.0))
             except Exception: pass
-        X0, Y0, X1, Y1 = ln["bbox_px"]
-        bbox_pt = (X0 / 3.0, Y0 / 3.0, X1 / 3.0, Y1 / 3.0) 
-        line_items.append({
-            "text": " ".join(texts),
-            "bold": None,
-            "italic": None,
-            "underline": any(bool(w.get("underline")) for w in ln["words"]),
-            "size_pt": None,
-            "size_mm": size_mm,
-            "size_unit": "pt",
-            "font": "",
-            "bbox": bbox_pt,
-            "source": "ocr",
-            "level": "line",
-            "confidence": min((w.get("confidence", 0) for w in ln["words"]), default=0),
-        })
+            X0, Y0, X1, Y1 = ln["bbox_px"]
+            Zs = []
+            for w in ln["words"]:
+                sp = float(w.get("size_pt") or 0.0)
+                hp = float(w.get("height_px") or 0.0)
+                if sp > 0 and hp > 0:
+                    Zs.append(hp / sp)
+            Z = _median(Zs) if Zs else 3.0
+            bbox_pt = (X0 / Z, Y0 / Z, X1 / Z, Y1 / Z)
+            line_items.append({
+                "text": " ".join(texts),
+                "bold": None,
+                "italic": None,
+                "underline": any(bool(w.get("underline")) for w in ln["words"]),
+                "size_pt": None,
+                "size_mm": size_mm,
+                "size_unit": "mm",
+                "font": "",
+                "bbox": bbox_pt,
+                "source": "ocr",
+                "level": "line",
+                "confidence": min((w.get("confidence", 0) for w in ln["words"]), default=0),
+            })
 
     items = []
     for w in all_words:
@@ -729,8 +786,16 @@ def _ocr_3plus_via_roi(page, plus_boxes, zoom=4.0):
             joined = " ".join([(data["text"][i] or "").strip()
                                for i in range(len(data.get("text", []))) if (data["text"][i] or "").strip()])
             if re.search(r"(?<!\w)3\s*[\+\＋](?!\w)", joined) or ("+" in joined or "＋" in joined):
-                size_pt = (ry1 - ry0) / max(1.0, z)
-                size_mm = _pt_to_mm(size_pt)
+                try:
+                    n2 = len(data.get("text", []))
+                    heights_px = [
+                        float(data["height"][i]) for i in range(n2)
+                        if (data["text"][i] or "").strip() and re.search(r"[0-9＋+]", data["text"][i])
+                    ]
+                    h_px = max(heights_px) if heights_px else (ry1 - ry0)
+                except Exception:
+                    h_px = (ry1 - ry0)
+                size_mm = _pt_to_mm(h_px / max(1.0, z)) 
                 out.append({
                     "text": "3+",
                     "bold": None, "italic": None, "underline": None,
@@ -741,8 +806,16 @@ def _ocr_3plus_via_roi(page, plus_boxes, zoom=4.0):
                 break
 
         if not hit and _detect_plus_by_hough(roi_g):
-            size_pt = (ry1 - ry0) / max(1.0, z)
-            size_mm = _pt_to_mm(size_pt)
+            try:
+                n2 = len(data.get("text", []))
+                heights_px = [
+                    float(data["height"][i]) for i in range(n2)
+                    if (data["text"][i] or "").strip() and re.search(r"[0-9＋+]", data["text"][i])
+                ]
+                h_px = max(heights_px) if heights_px else (ry1 - ry0)
+            except Exception:
+                h_px = (ry1 - ry0)
+            size_mm = _pt_to_mm(h_px / max(1.0, z))
             out.append({
                 "text": "3+",
                 "bold": None, "italic": None, "underline": None,
@@ -809,8 +882,16 @@ def _ocr_plus_next_to_three(page, three_boxes, zoom=4.0, max_targets=4):
             joined = " ".join([(data["text"][i] or "").strip()
                                for i in range(len(data.get("text", []))) if (data["text"][i] or "").strip()])
             if ("+" in joined) or ("＋" in joined):
-                size_pt = (ry1 - ry0) / max(1.0, z)
-                size_mm = _pt_to_mm(size_pt)
+                try:
+                    n2 = len(data.get("text", []))
+                    heights_px = [
+                        float(data["height"][i]) for i in range(n2)
+                        if (data["text"][i] or "").strip() and re.search(r"[0-9＋+]", data["text"][i])
+                    ]
+                    h_px = max(heights_px) if heights_px else (ry1 - ry0)
+                except Exception:
+                    h_px = (ry1 - ry0)
+                size_mm = _pt_to_mm(h_px / max(1.0, z))
                 out.append({
                     "text": "3+",
                     "bold": None, "italic": None, "underline": None,
@@ -821,8 +902,16 @@ def _ocr_plus_next_to_three(page, three_boxes, zoom=4.0, max_targets=4):
                 break
 
         if not hit and _detect_plus_by_hough(roi_g):
-            size_pt = (ry1 - ry0) / max(1.0, z)
-            size_mm = _pt_to_mm(size_pt)
+            try:
+                n2 = len(data.get("text", []))
+                heights_px = [
+                    float(data["height"][i]) for i in range(n2)
+                    if (data["text"][i] or "").strip() and re.search(r"[0-9＋+]", data["text"][i])
+                ]
+                h_px = max(heights_px) if heights_px else (ry1 - ry0)
+            except Exception:
+                h_px = (ry1 - ry0)
+            size_mm = _pt_to_mm(h_px / max(1.0, z))
             out.append({
                 "text": "3+",
                 "bold": None, "italic": None, "underline": None,
@@ -870,11 +959,17 @@ def extract_text_by_page(pdf_path, enable_ocr=True, ocr_lang="eng+tha", ocr_only
                         if not text:
                             continue
 
-                        size_pt  = float(span.get("size", 0) or 0)
-                        size_mm  = _pt_to_mm(size_pt)
+                        bbox     = span.get("bbox", None)
+                        prefer = "".join([c for c in text if (c.isdigit() or (c.isalpha() and c.upper()==c) or c in "+#%()[]")])
+
+                        size_mm = 0.0
+                        if bbox and prefer:
+                            size_mm = _capheight_from_search(page, bbox, prefer)
+                        if size_mm <= 0:
+                            size_mm = _span_visual_height_mm(span)
+
                         fontname = span.get("font", "") or ""
                         flags    = int(span.get("flags", 0) or 0)
-                        bbox     = span.get("bbox", None)
 
                         raw_spans.append({
                             "text": text,
@@ -890,9 +985,8 @@ def extract_text_by_page(pdf_path, enable_ocr=True, ocr_lang="eng+tha", ocr_only
                             ),
                             "italic": (flags & 1) != 0,
                             "underline": ((flags & 8) != 0) or ("underline" in fontname.lower()),
-                            "size_pt": size_pt,
                             "size_mm": size_mm,
-                            "size_unit": "pt",
+                            "size_unit": "mm",
                             "font": fontname,
                             "bbox": bbox,
                             "source": "pdf",
