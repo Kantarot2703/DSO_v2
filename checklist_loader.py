@@ -17,30 +17,6 @@ TOKEN_RE = re.compile(
     r"[A-Za-z0-9\u00C0-\u024F\u0400-\u04FF\u0E00-\u0E7F]+(?:-[A-Za-z0-9\u00C0-\u024F\u0400-\u04FF\u0E00-\u0E7F]+)?"
 )
 
-# ----- Font-size tolerance -----
-def _size_meets_threshold(measured_mm: float, required_mm: float) -> bool:
-    try:
-        m = float(measured_mm or 0.0)
-        r = float(required_mm or 0.0)
-    except Exception:
-        return False
-    return (m + 1e-6) >= r
-
-FONT_SOFT_UPPER_REL = 0.15 
-FONT_SOFT_UPPER_ABS = 0.30 
-
-def _oversize_warning(measured_mm: float, required_mm: float,
-                      rel: float = FONT_SOFT_UPPER_REL, abs_mm: float = FONT_SOFT_UPPER_ABS):
-    try:
-        m = float(measured_mm or 0.0)
-        r = float(required_mm or 0.0)
-    except Exception:
-        return (False, 0.0, 0.0)
-    u_soft = r * (1.0 + rel) + abs_mm
-    if m > u_soft:
-        return (True, m - u_soft, u_soft)
-    return (False, 0.0, u_soft)
-
 def _contains_any(s: str, keys) -> bool:
     s = (s or "").lower()
     return any(k in s for k in keys)
@@ -807,8 +783,8 @@ def start_check(df_checklist, extracted_text_list):
         #EN
         "brand logo", "copyright for t&f", "space for date code", "lion mark", "lionmark", "lion-mark", "ce mark", "en 71",
         "ukca", "mc mark", "cib", "argentina logo", "brazilian logo", "italy requirement", "france requirement",
-        "sorting & donation label", "spain sorting symbols", "usa warning statement", "generic name",
-        "upc requirement", "list of content : text", "list of content : pictorial", "product’s common", "product's common",
+        "sorting & donation label", "spain sorting symbols", "usa warning statement", "international warning statement",
+        "upc requirement", "list of content : text", "list of content : pictorial", "product’s common", "product's common", "generic name",
         # TH
         "โลโก้", "ลิขสิทธิ์", "ตรา", "สัญลักษณ์", "เครื่องหมาย",
         "สำรองพื้นที่รหัสวันที่", "เครื่องหมายรับรอง"
@@ -1510,7 +1486,7 @@ def start_check(df_checklist, extracted_text_list):
                     match_result = "❌"; notes.append("Underline Missing")
 
             # ---- All Caps ----
-            if _contains_any(spec_lower, ("all caps", "ตัวพิมพ์ใหญ่ทั้งหมด", "ตัวใหญ่ทั้งหมด", "พิมพ์ใหญ่ทั้งหมด")):
+            if _contains_any(spec_lower, ("all caps", "ตัวพิมพ์ใหญ่ทั้งหมด", "ตัวใหญทั้งหมด", "พิมพ์ใหญ่ทั้งหมด")):
                 if not _all_caps_items(matched_items):
                     match_result = "❌"
                     notes.append("Not All Caps")
@@ -1518,18 +1494,12 @@ def start_check(df_checklist, extracted_text_list):
             # ---- Font size ----  
             thr_mm = _parse_threshold_to_mm(spec_lower)
             font_size_str = "-"
-            size_note = None
-
             if thr_mm is not None:
                 if matched_items and (max_size_mm is not None):
-                    meas_str = _fmt_mm(max_size_mm)
-                    spec_str = _fmt_mm(thr_mm)
-
-                    size_note = f"size {meas_str} (spec ≥ {spec_str})"
-
-                    if not _size_meets_threshold(max_size_mm, thr_mm):
+                    if max_size_mm < thr_mm:
                         match_result  = "❌"
                         font_size_str = "❌"
+                        notes.append(f"font {_fmt_mm(max_size_mm)}")
                     else:
                         font_size_str = "✔"
                 else:
@@ -1553,15 +1523,10 @@ def start_check(df_checklist, extracted_text_list):
                 detected_all |= (_codes or set())
 
             # ---- Notes ----
-            is_found = bool(found_pages_all)
-            is_pass  = (match_result == "✔")
-
-            if is_found and is_pass:
-                notes_to_show = [size_note] if size_note else []
+            if str(found_flag).startswith("✅") and (match_result == "✔"):
+                note_str = "-"
             else:
-                notes_to_show = _dedup_notes(notes + ([size_note] if size_note else []))
-
-            note_str = ", ".join(notes_to_show) if notes_to_show else "-"
+                note_str = ", ".join(_dedup_notes(notes)) if notes else "-"
 
             # --- LOG หลักฐานการตรวจ (หลักฐานจาก PDF/OCR จริง) ---
             _log_evidence(
