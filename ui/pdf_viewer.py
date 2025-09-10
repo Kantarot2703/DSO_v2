@@ -1,7 +1,6 @@
 from typing import List, Dict, Optional
 from collections import OrderedDict
 import re
-import unicodedata
 import fitz
 from PyQt5 import QtWidgets, QtCore, QtGui
 from PyQt5.QtCore import Qt, QRectF, QTimer
@@ -57,11 +56,11 @@ def build_terms_from_symbol(symbol_text: str) -> List[str]:
     s = (symbol_text or "").replace("\r", "").strip()
     if not s or s == "-":
         return []
-    parts = re.split(r"[|；;｜\n]+|\s+/\s+", s)
+    parts = re.split(r"[|;\n]+", s)
     terms: List[str] = []
     seen = set()
     for p in parts:
-        t = p.strip().strip(" .，、：:") 
+        t = p.strip().strip(" .;,，、：:")
         if not t:
             continue
         if t not in seen:
@@ -84,116 +83,6 @@ def _space_variants(term: str) -> List[str]:
         variants.add(term.replace(" ", alt))
     variants.add(term.replace(" ", "  "))
     return list(variants)
-
-# --- Robust phrase search helpers ---
-_SPACE_CHARS = {"\u00A0", "\u2009", "\u2002", "\u2003", "\u202F", "\u2007", "\u2008", "\u200A", "\u2000", "\u2001", "\u2004", "\u2005", "\u2006", "\u200B"}
-_SEP_TOKENS = {"•", "·", "∙", "・", "/", "|", "¦", "-", "–", "—", ":"}
-
-def _norm_text(s: str) -> str:
-    if not s:
-        return ""
-    for ch in _SPACE_CHARS:
-        s = s.replace(ch, " ")
-    import unicodedata
-    s = unicodedata.normalize("NFKC", s)
-    return s.strip().casefold()
-
-def _term_tokens(term: str) -> list[str]:
-    t = _norm_text(term)
-    raw = re.split(r"[ \t\r\n/|•·∙・:¦\-–—]+", t)
-    return [x for x in raw if x]
-
-def _is_sep_word(w: str) -> bool:
-    wn = _norm_text(w)
-    return (wn in {c.casefold() for c in _SEP_TOKENS}) or (not wn) or all(not ch.isalnum() and ch != "+" for ch in wn)
-
-def _union_rect(a: fitz.Rect, b: fitz.Rect) -> fitz.Rect:
-    return fitz.Rect(min(a.x0, b.x0), min(a.y0, b.y0), max(a.x1, b.x1), max(a.y1, b.y1))
-
-def _group_rects_by_line(words_slice: list[tuple]) -> list[fitz.Rect]:
-    if not words_slice:
-        return []
-    out: list[fitz.Rect] = []
-    cur_line = (words_slice[0][5], words_slice[0][6])  # (block, line)
-    cur_rect = fitz.Rect(words_slice[0][0], words_slice[0][1], words_slice[0][2], words_slice[0][3])
-    for (x0,y0,x1,y1,txt,bk,ln,wn) in words_slice[1:]:
-        line_id = (bk, ln)
-        r = fitz.Rect(x0,y0,x1,y1)
-        if line_id == cur_line:
-            cur_rect = _union_rect(cur_rect, r)
-        else:
-            out.append(cur_rect)
-            cur_line = line_id
-            cur_rect = r
-    out.append(cur_rect)
-    return out
-
-def _phrase_hits_by_words(page: fitz.Page, term: str, max_hits: int = 64) -> list[fitz.Rect]:
-    tokens = _term_tokens(term)
-    if not tokens:
-        return []
-
-    words = page.get_text("words") or []  
-    if not words:
-        return []
-
-    W = []
-    for (x0,y0,x1,y1,txt,bk,ln,wn) in words:
-        W.append((x0,y0,x1,y1,txt,bk,ln,wn, _norm_text(txt)))
-
-    hits: list[fitz.Rect] = []
-    n = len(W); tlen = len(tokens)
-    i = 0
-    while i < n and len(hits) < max_hits:
-        if W[i][8] and (tokens[0].startswith(W[i][8]) or W[i][8] == tokens[0]):
-            j = i
-            ok = True
-            matched_word_indices: list[int] = []
-            k = 0 
-
-            def consume_for_token(start_idx: int, token: str) -> tuple[bool, int, list[int]]:
-                acc = ""
-                pos = start_idx
-                used = []
-                while pos < n:
-                    wnorm = W[pos][8]
-                    if _is_sep_word(W[pos][4]):  
-                        pos += 1
-                        continue
-                    if not wnorm:
-                        break
-                    if token.startswith(acc + wnorm):
-                        acc += wnorm
-                        used.append(pos)
-                        pos += 1
-                        if acc == token:
-                            return True, pos, used
-                        continue
-                    else:
-                        break
-                return False, start_idx, []
-
-            while k < tlen and j < n:
-                while j < n and _is_sep_word(W[j][4]):
-                    j += 1
-                if j >= n:
-                    ok = False
-                    break
-                success, j2, used = consume_for_token(j, tokens[k])
-                if not success:
-                    ok = False
-                    break
-                matched_word_indices.extend(used)
-                j = j2
-                k += 1
-
-            if ok and matched_word_indices:
-                matched_words = [W[idx] for idx in matched_word_indices]
-                rects = _group_rects_by_line([(x0,y0,x1,y1,txt,bk,ln,wn) for (x0,y0,x1,y1,txt,bk,ln,wn,_) in matched_words])
-                hits.extend(rects)
-        i += 1
-
-    return hits
 
 def shrink_rect(rect: fitz.Rect,
                 left_ratio: float, right_ratio: float,
@@ -534,16 +423,13 @@ class PDFViewer(QWidget):
             rects = page.search_for(term) or []
             if rects:
                 return rects
-            
             for alt in _space_variants(term):
                 if alt == term:
                     continue
                 rects = page.search_for(alt) or []
                 if rects:
                     return rects
-
-            rects = _phrase_hits_by_words(page, term) or []
-            return rects
+            return []
         except Exception:
             return []
 
@@ -799,3 +685,6 @@ class PdfPreviewWindow(QMainWindow):
 
         QShortcut(QKeySequence.ZoomIn,  self, activated=lambda: self.viewer.user_zoom(1.1))
         QShortcut(QKeySequence.ZoomOut, self, activated=lambda: self.viewer.user_zoom(1/1.1))
+
+        QtCore.QTimer.singleShot(0, self.viewer.fit_width)
+        QtCore.QTimer.singleShot(0, self.viewer.render_page)
