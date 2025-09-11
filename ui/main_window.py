@@ -50,12 +50,95 @@ PART_OCR_MAP_FULL = {
     "DC1": "eng+fra+deu+ita+nld+spa+por+pol+ces+hun+jpn",
 }
 
+# ==== UI-only: hide entire SPW/SPG group if the whole group is "Not Found" (robust by Requirement) ====
+def _hide_empty_sp_group_ui(df):
+    """
+    ซ่อนทั้ง 'กลุ่ม' ของ International warning statement:
+      - กลุ่ม SPW หรือ SPG จะถูก 'ซ่อนทั้งกลุ่ม' ถ้าในกลุ่มนั้นไม่มีแถวใด Found เลย
+    เงื่อนไขการจับกลุ่ม:
+      - อ่านจากคอลัมน์ Requirement เป็นหลัก (เพราะไฟล์ของคุณระบุ ': SPW' / ': SPG' ที่นี่)
+      - ทนต่อช่องว่างซ้ำ, โคลอนหลายแบบ (:/：), และขีด ( - / – / — )
+    เกณฑ์ Found:
+      - ถ้า 'Found' เริ่มด้วย '✅' = found
+      - ถ้าไม่มี 'Found' ให้ fallback ใช้ Pages (ไม่ใช่ '-', '—', '', 'none', '0')
+    """
+    try:
+        import pandas as pd
+
+        if df is None or df.empty:
+            return df
+
+        cols = set(df.columns)
+        if "Requirement" not in cols:
+            return df
+
+        REQ_COL   = "Requirement"
+        PAGES_COL = "Pages"
+        FOUND_COL = "Found" if "Found" in cols else None
+
+        def _norm(s: str) -> str:
+            # normalize: NFKC, lower, collapse spaces, unify dashes
+            s = _ud.normalize("NFKC", str(s or ""))
+            s = s.replace("\u2013", "-").replace("\u2014", "-").replace("\u2212", "-")
+            s = s.lower()
+            s = re.sub(r"\s+", " ", s).strip()
+            return s
+
+        # regex: international\s+warning\s+statement\s*[:：\-]?\s*(spw|spg)\b
+        PAT = re.compile(r"international\s+warning\s+statement\s*[:：\-]?\s*(spw|spg)\b", re.I)
+
+        def _row_tag(row) -> str:
+            req = _norm(row.get(REQ_COL, ""))
+            m = PAT.search(req)
+            if not m:
+                return ""   # ไม่ใช่แถวของ SPW/SPG
+            return m.group(1).lower()  # 'spw' หรือ 'spg'
+
+        def _pages_not_empty(v) -> bool:
+            if v is None: return False
+            if isinstance(v, (set, list, tuple)): return len(v) > 0
+            s = str(v).strip().lower()
+            return s not in ("", "-", "—", "none", "0")
+
+        def _row_found(row) -> bool:
+            if FOUND_COL:
+                f = str(row.get(FOUND_COL, "")).strip()
+                if f.startswith("✅"):
+                    return True
+                if f.startswith("❌"):
+                    return False
+            return _pages_not_empty(row.get(PAGES_COL, None))
+
+        # ทำ tagging ทีละแถวจาก Requirement
+        tags = [ _row_tag(df.iloc[i]) for i in range(len(df)) ]
+        if not any(t in ("spw","spg") for t in tags):
+            return df  # ไม่มีแถว SP เลย
+
+        is_spw = [t == "spw" for t in tags]
+        is_spg = [t == "spg" for t in tags]
+
+        spw_found_any = any(_row_found(df.iloc[i]) for i, m in enumerate(is_spw) if m)
+        spg_found_any = any(_row_found(df.iloc[i]) for i, m in enumerate(is_spg) if m)
+
+        keep_idx = []
+        for i in range(len(df)):
+            if is_spw[i] and not spw_found_any:
+                continue  # ซ่อนทั้งกลุ่ม SPW
+            if is_spg[i] and not spg_found_any:
+                continue  # ซ่อนทั้งกลุ่ม SPG
+            keep_idx.append(i)
+
+        return df.iloc[keep_idx].copy() if keep_idx else df.iloc[0:0].copy()
+
+    except Exception as e:
+        try:
+            print("[UI-HIDE-SP] error:", e)
+        except:
+            pass
+        return df
+
 # ==== Preview helpers for SP rules ====
 def _prune_spw_prefix_terms_if_spg_present(terms, df_result):
-    """
-    ถ้าในผลลัพธ์มี SPG (Found) อยู่แล้ว: ตัดคำสั้นของ SPW ที่เป็น prefix ออก
-    ใช้เฉพาะตอน Preview Filter = "All" เพื่อกันไม่ให้ไฮไลท์ "WARNING: Small parts" ในไฟล์ SPG
-    """
     try:
         if df_result is None:
             return terms
@@ -731,6 +814,7 @@ class DSOApp(QtWidgets.QWidget):
 
         # ตัด internal ออกจากรายการแสดงผล
         tail = [c for c in tail if c not in internal_hide]
+        df = _hide_empty_sp_group_ui(df.copy())
         df_ui = df.loc[:, ordered + tail]
 
         # ตั้งค่าตาราง
