@@ -50,6 +50,39 @@ PART_OCR_MAP_FULL = {
     "DC1": "eng+fra+deu+ita+nld+spa+por+pol+ces+hun+jpn",
 }
 
+# ==== Preview helpers for SP rules ====
+def _prune_spw_prefix_terms_if_spg_present(terms, df_result):
+    """
+    ถ้าในผลลัพธ์มี SPG (Found) อยู่แล้ว: ตัดคำสั้นของ SPW ที่เป็น prefix ออก
+    ใช้เฉพาะตอน Preview Filter = "All" เพื่อกันไม่ให้ไฮไลท์ "WARNING: Small parts" ในไฟล์ SPG
+    """
+    try:
+        if df_result is None:
+            return terms
+
+        REQ_COL   = "Requirement"
+        PAGES_COL = "Pages"
+        if not (isinstance(df_result, type(None)) or df_result.empty):
+            def _pages_not_empty(v):
+                if v is None: return False
+                if isinstance(v, (set, list, tuple)): return len(v) > 0
+                s = str(v).strip()
+                return not (s == "" or s == "-" or s == "—" or s.lower() == "none" or s == "0")
+
+            df_found = df_result[df_result[PAGES_COL].map(_pages_not_empty)] if (PAGES_COL in df_result.columns) else df_result
+            if REQ_COL in df_found.columns:
+                req_norm = df_found[REQ_COL].fillna("").str.lower()
+                have_spg_found = bool((req_norm.str.contains("international warning statement", regex=False)
+                                       & req_norm.str.contains(r"\bspg\b", regex=True)).any())
+                if have_spg_found:
+                    def _is_short_spw(s: str) -> bool:
+                        s2 = (s or "").lower()
+                        return ("warning" in s2 and "small parts" in s2 and "may be generat" not in s2)
+                    terms = [t for t in terms if not _is_short_spw(t)]
+        return terms
+    except Exception:
+        return terms
+
 def _get_ocr_langs_for_part(part_code: str):
     code = (part_code or "").strip().upper()
     fast = PART_OCR_MAP_FAST.get(code, "eng")
@@ -1304,23 +1337,52 @@ class DSOApp(QtWidgets.QWidget):
             ver    = str(row.get(col_ver, "") or "").strip().lower() if col_ver else ""
             pages  = str(row.get(col_pages, "") or "") if col_pages else ""
 
-            if not symbol or symbol == "-":
-                status = "manual" if ver == "manual" else "missing"
-            else:
-                if found.strip().startswith("✅"):
-                    status = "found"
-                elif ver == "manual":
-                    status = "manual"
-                else:
-                    status = "missing"
+            # --- สถานะ + หน้าที่ใช้จริงในพรีวิว ---
+            is_found = found.strip().startswith("✅")
+            is_manual = (ver == "manual")
+            status = "manual" if is_manual else ("found" if is_found else "missing")
 
+            # ถ้าไม่พบ → pages_spec = "" (จะถูก parse เป็น set() = no pages)
+            pages_spec = pages if ((is_found or is_manual) and pages not in ("", "-", "—")) else ""
+            
+            try:
+                row_id = int(i)
+            except Exception:
+                row_id = len(rows)
+            
             rows.append({
-                "id": int(i) if isinstance(i, (int,)) else len(rows),
+                "id": row_id,
                 "requirement": req,
                 "symbol": symbol,
                 "status": status,
-                "pages_spec": pages,
+                "pages_spec": pages_spec,
             })
+
+        # ==== PRUNE rows: อย่าให้ SPW (สั้น) ที่ Not Found หลุดไปไฮไลท์ เมื่อมี SPG (Found) อยู่แล้ว ====
+        try:
+            req_col   = col_req   or "Requirement"
+            pages_col = col_pages or "Pages"
+            have_spg_found = False
+            if req_col in df.columns and pages_col in df.columns:
+                def _pages_not_empty(v):
+                    if v is None: return False
+                    if isinstance(v, (set, list, tuple)): return len(v) > 0
+                    s = str(v).strip()
+                    return not (s == "" or s == "-" or s == "—" or s.lower() == "none" or s == "0")
+                reqn = df[req_col].fillna("").str.lower()
+                m_spg = reqn.str.contains("international warning statement", regex=False) & reqn.str.contains(r"\bspg\b", regex=True)
+                if m_spg.any():
+                    have_spg_found = bool(df.loc[m_spg, pages_col].map(_pages_not_empty).any())
+
+            if have_spg_found:
+
+                def _is_short_spw_symbol(s: str) -> bool:
+                    s2 = (s or "").lower()
+                    return ("warning" in s2 and "small parts" in s2 and "may be generat" not in s2)
+
+                rows = [r for r in rows if not (_is_short_spw_symbol(r.get("symbol")) and r.get("status") != "found")]
+        except Exception:
+            pass
 
         # ถ้ามีหน้าต่างพรีวิวเปิดอยู่แล้ว ให้โฟกัสแทนการเปิดใหม่
         w = getattr(self, "_pdf_preview_win", None)

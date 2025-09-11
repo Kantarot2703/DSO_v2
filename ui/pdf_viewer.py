@@ -25,11 +25,20 @@ DEFAULT_LRU_CAPACITY = 8
 
 # ------------------------------ Helpers ------------------------------
 def parse_pages_spec(spec: str, total_pages: int) -> Optional[set]:
-    if not spec:
-        return None
-    s = spec.strip().lower()
-    if s in {"-", "all", "all pages", "all page"}:
-        return None
+    """
+    Return:
+      - None  = all pages
+      - set() = no pages
+      - {0,2,3,...} = concrete page indices (0-based)
+    """
+    if spec is None:
+        return set()  #
+    s = str(spec).strip().lower()
+    if s in {"", "-"}:
+        return set()  
+    if s in {"all", "all pages", "all page"}:
+        return None   
+
     out = set()
     for part in re.split(r"[,\s]+", s):
         if not part:
@@ -50,7 +59,7 @@ def parse_pages_spec(spec: str, total_pages: int) -> Optional[set]:
                     out.add(p - 1)
             except Exception:
                 continue
-    return out or None
+    return out
 
 def build_terms_from_symbol(symbol_text: str) -> List[str]:
     s = (symbol_text or "").replace("\r", "").strip()
@@ -391,7 +400,11 @@ class PDFViewer(QWidget):
         out = []
         for r in candidates:
             pset = parse_pages_spec(r.get("pages_spec", ""), self.page_count)
-            if (pset is None) or (page_no in pset):
+            if pset is None:
+                out.append(r)               
+            elif len(pset) == 0:
+                continue                   
+            elif page_no in pset:
                 out.append(r)
         return out
 
@@ -399,11 +412,34 @@ class PDFViewer(QWidget):
         rows = self._active_rows_for_page(page_no)
         if self.selected_row_id is not None:
             rows = [r for r in rows if r.get("id") == self.selected_row_id]
-        terms: List[str] = []
+
+        raw_terms: List[str] = []
         for r in rows:
-            terms.extend(build_terms_from_symbol(r.get("symbol", "")))
+            raw_terms.extend(build_terms_from_symbol(r.get("symbol", "")))
+
+        # --- SPW prefix suppression when the page is SPG-only, only in Filter=All ---
+        if (self.filter_mode == "all") and (self.selected_row_id is None):
+            def _is_spw_req(s: str) -> bool:
+                s = (s or "").lower()
+                return ("international warning statement" in s) and ("spw" in s)
+
+            def _is_spg_req(s: str) -> bool:
+                s = (s or "").lower()
+                return ("international warning statement" in s) and ("spg" in s)
+
+            spw_here = any(_is_spw_req(r.get("requirement", "")) for r in rows)
+            spg_here = any(_is_spg_req(r.get("requirement", "")) for r in rows)
+
+            # ถ้าหน้านี้มีแต่ SPG (ไม่มี SPW) → ตัด "WARNING: Small parts" เดี่ยว ๆ ออก
+            if spg_here and not spw_here:
+                def _is_short_spw(term: str) -> bool:
+                    t = (term or "").casefold()
+                    return ("warning" in t and "small parts" in t and "may be generat" not in t)
+                raw_terms = [t for t in raw_terms if not _is_short_spw(t)]
+
+        # de-dup
         seen = set(); out=[]
-        for t in terms:
+        for t in raw_terms:
             if t not in seen:
                 seen.add(t); out.append(t)
         return out[:200]

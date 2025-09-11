@@ -19,9 +19,6 @@ TOKEN_RE = re.compile(
 
 PAGE_LEVEL_TEXTS = {} 
 
-HIDE_EMPTY_SP_GROUP = False
-
-
 def _contains_any(s: str, keys) -> bool:
     s = (s or "").lower()
     return any(k in s for k in keys)
@@ -1461,7 +1458,7 @@ def start_check(df_checklist, extracted_text_list):
                 if is_sp_rule:
                     if req_tag == "SPW":
                         allowed = {"SHORT", "BOTH"}
-                    else:  # SPG
+                    else:  
                         allowed = {"MBG", "BOTH"}
 
                     # cast → set แล้วค่อยใช้ต่อ
@@ -1489,6 +1486,14 @@ def start_check(df_checklist, extracted_text_list):
 
             # ใช้ best สำหรับตรวจรูปแบบ/ขนาดตัวอักษร
             matched_items = _dedup_items(all_items) or best["items"]
+
+            # --- SPW boundary: กันเคสจับ prefix ของ SPG ---
+            if req_tag == "SPW":
+                def _is_clean_spw_text(t: str) -> bool:
+                    s = normalize_text(t or "")
+                    # ต้องไม่มี "may be generat..." ต่อท้าย เพื่อกันกรณี SPG
+                    return ("warning" in s and "small parts" in s and "may be generat" not in s)
+                matched_items = [it for it in matched_items if _is_clean_spw_text(it.get("text",""))]
 
             # แต่ "การรายงานหน้า" ให้ใช้ union ของทุก variant
             found_pages_all = sorted(set(union_pages))
@@ -1721,4 +1726,128 @@ def start_check(df_checklist, extracted_text_list):
                 "Image_Groups_Resolved": item.get("Image_Groups_Resolved", []),
             })
 
-    return pd.DataFrame(final_results)
+    # ====== สร้างผลลัพธ์แถวสุดท้าย (normalize ช่องให้เข้ารูป) ======
+    final_results = []
+    for (requirement, spec, verification), items in grouped.items():
+        for item in items:
+            raw_term = item.get("Term", "")
+            has_imgs = bool(item.get("Image_Groups_Resolved") or [])
+
+            def _is_blank(s) -> bool:
+                s = "" if s is None else str(s).strip()
+                return s.lower() in ("", "nan", "none", "-")
+
+            if _is_blank(raw_term) and has_imgs:
+                term_display = ""
+            elif _is_blank(raw_term):
+                term_display = "-"
+            else:
+                term_display = str(raw_term)
+
+            final_results.append({
+                "Requirement": requirement,
+                "Symbol/ Exact wording": term_display,
+                "Specification": spec,
+                "Package Panel": item.get("Package Panel", "-"),
+                "Procedure": item.get("Procedure", "-"),
+                "Remark": item.get("Remark", "-"),
+                "Remark URL": item.get("Remark URL", "-"),
+                "Found": item["Found"],
+                "Match": item["Match"],
+                "Pages": item["Pages"],
+                "Font Size": item["Font Size"],
+                "Note": item["Note"],
+                "Verification": verification,
+                "__Term_HTML__": item.get("__Term_HTML__", ""),
+                "Image_Groups_Resolved": item.get("Image_Groups_Resolved", []),
+            })
+
+    # ====== สร้างผลลัพธ์แถวสุดท้าย (normalize ช่องให้เข้ารูป) ======
+    final_results = []
+    for (requirement, spec, verification), items in grouped.items():
+        for item in items:
+            raw_term = item.get("Term", "")
+            has_imgs = bool(item.get("Image_Groups_Resolved") or [])
+
+            def _is_blank(s) -> bool:
+                s = "" if s is None else str(s).strip()
+                return s.lower() in ("", "nan", "none", "-")
+
+            if _is_blank(raw_term) and has_imgs:
+                term_display = ""
+            elif _is_blank(raw_term):
+                term_display = "-"
+            else:
+                term_display = str(raw_term)
+
+            final_results.append({
+                "Requirement": requirement,
+                "Symbol/ Exact wording": term_display,
+                "Specification": spec,
+                "Package Panel": item.get("Package Panel", "-"),
+                "Procedure": item.get("Procedure", "-"),
+                "Remark": item.get("Remark", "-"),
+                "Remark URL": item.get("Remark URL", "-"),
+                "Found": item["Found"],
+                "Match": item["Match"],
+                "Pages": item["Pages"],
+                "Font Size": item["Font Size"],
+                "Note": item["Note"],
+                "Verification": verification,
+                "__Term_HTML__": item.get("__Term_HTML__", ""),
+                "Image_Groups_Resolved": item.get("Image_Groups_Resolved", []),
+            })
+
+    df_result = pd.DataFrame(final_results)
+
+    # ==== Hide empty SP group (SPW/SPG only) ====
+    HIDE_EMPTY_SP_GROUP = True
+
+    if HIDE_EMPTY_SP_GROUP and isinstance(df_result, pd.DataFrame) and not df_result.empty:
+        REQ_COL   = "Requirement"
+        SPEC_COL  = "Specification" if "Specification" in df_result.columns else None
+        PAGES_COL = "Pages"
+        FOUND_COL = "Found" if "Found" in df_result.columns else None
+
+        # รวม Requirement + Specification เพื่อหาแท็ก SPW/SPG ให้แม่นทุกไฟล์
+        if REQ_COL in df_result.columns:
+            req_norm  = df_result[REQ_COL].fillna("").str.lower()
+            spec_norm = (df_result[SPEC_COL].fillna("").str.lower()) if SPEC_COL else pd.Series([""] * len(df_result))
+            both      = (req_norm + " || " + spec_norm)
+
+            is_spw = both.str.contains("international warning statement", regex=False) & \
+                     both.str.contains(r"\bspw\b", regex=True)
+            is_spg = both.str.contains("international warning statement", regex=False) & \
+                     both.str.contains(r"\bspg\b", regex=True)
+
+            # ฟังก์ชันตัดสิน "แถวนี้เจอจริงไหม"
+            def _row_is_found(row) -> bool:
+                if FOUND_COL:
+                    f = str(row.get(FOUND_COL, "")).strip()
+                    if f.startswith("✅"):
+                        return True
+                    if f.startswith("❌"):
+                        return False
+                v = row.get(PAGES_COL, None)
+                if v is None:
+                    return False
+                if isinstance(v, (set, list, tuple)):
+                    return len(v) > 0
+                s = str(v).strip().lower()
+                return not (s == "" or s == "-" or s == "—" or s == "none" or s == "0")
+
+            # กลุ่มว่าง = ไม่มีสักแถวที่ "Found"
+            hide_spw = False
+            hide_spg = False
+            if is_spw.any():
+                hide_spw = not df_result.loc[is_spw].apply(_row_is_found, axis=1).any()
+            if is_spg.any():
+                hide_spg = not df_result.loc[is_spg].apply(_row_is_found, axis=1).any()
+
+            # ซ่อนทั้งกลุ่ม
+            if hide_spw:
+                df_result = df_result[~is_spw]
+            if hide_spg:
+                df_result = df_result[~is_spg]
+
+    return df_result
