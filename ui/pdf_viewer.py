@@ -431,11 +431,11 @@ class PDFViewer(QWidget):
             spg_here = any(_is_spg_req(r.get("requirement", "")) for r in rows)
 
             # ถ้าหน้านี้มีแต่ SPG (ไม่มี SPW) → ตัด "WARNING: Small parts" เดี่ยว ๆ ออก
-            if spg_here and not spw_here:
-                def _is_short_spw(term: str) -> bool:
+            if spw_here and not spg_here:
+                def _is_mbg_spg(term: str) -> bool:
                     t = (term or "").casefold()
-                    return ("warning" in t and "small parts" in t and "may be generat" not in t)
-                raw_terms = [t for t in raw_terms if not _is_short_spw(t)]
+                    return ("small parts" in t and "may be generat" in t)
+                raw_terms = [t for t in raw_terms if not _is_mbg_spg(t)]
 
         # de-dup
         seen = set(); out=[]

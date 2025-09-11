@@ -63,8 +63,6 @@ def _hide_empty_sp_group_ui(df):
       - ถ้าไม่มี 'Found' ให้ fallback ใช้ Pages (ไม่ใช่ '-', '—', '', 'none', '0')
     """
     try:
-        import pandas as pd
-
         if df is None or df.empty:
             return df
 
@@ -815,7 +813,9 @@ class DSOApp(QtWidgets.QWidget):
         # ตัด internal ออกจากรายการแสดงผล
         tail = [c for c in tail if c not in internal_hide]
         df = _hide_empty_sp_group_ui(df.copy())
-        df_ui = df.loc[:, ordered + tail]
+        df_src = df_src.loc[df.index].copy()
+        df_ui  = df.loc[:, ordered + tail].reset_index(drop=True)
+        df_src = df_src.reset_index(drop=True)
 
         # ตั้งค่าตาราง
         self.result_table.setRowCount(len(df_ui))
@@ -1413,6 +1413,8 @@ class DSOApp(QtWidgets.QWidget):
         if not (col_sym and col_found):
             QtWidgets.QMessageBox.information(self, "Preview PDF", "ไม่พบคอลัมน์ที่จำเป็น (Symbol/Exact wording, Found)")
             return
+        
+        df = _hide_empty_sp_group_ui(df.copy())
 
         for i, row in df.iterrows():
             symbol = str(row.get(col_sym, "") or "").strip()
