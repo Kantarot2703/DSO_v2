@@ -17,6 +17,11 @@ TOKEN_RE = re.compile(
     r"[A-Za-z0-9\u00C0-\u024F\u0400-\u04FF\u0E00-\u0E7F]+(?:-[A-Za-z0-9\u00C0-\u024F\u0400-\u04FF\u0E00-\u0E7F]+)?"
 )
 
+PAGE_LEVEL_TEXTS = {} 
+
+HIDE_EMPTY_SP_GROUP = False
+
+
 def _contains_any(s: str, keys) -> bool:
     s = (s or "").lower()
     return any(k in s for k in keys)
@@ -767,10 +772,46 @@ def load_checklist(excel_path, pdf_filename=None):
 
     raise ValueError("❌ ไม่พบ Sheet ที่ตรงกับ Part code จากชื่อไฟล์ PDF")
 
+def _classify_spw_by_page(page_norm_text: dict[int, str]) -> dict[int, str]:
+    """
+    จัดชนิด SP ต่อหน้า:
+      - 'MBG'  : พบ "small parts may be generat..." (ยอมทุกคำสะกดที่ขึ้นต้น generat-)
+      - 'SHORT': พบ "small parts" แบบจบช่วง/จบประโยค โดย "ไม่มี may be generat..." ต่อท้ายติดกัน
+      - 'BOTH' : มีทั้งกรณี MBG และ SHORT อยู่คนละช่วงบนหน้าเดียวกัน
+      - 'UNKNOWN': ไม่พบสัญญาณ
+    """
+    spw_map: dict[int, str] = {}
+    rx_mbg   = re.compile(r"small\s+parts\s+may\s+be\s+generat", re.IGNORECASE)
+    rx_short = re.compile(r"small\s+parts(?!\s+may\s+be\s+generat)", re.IGNORECASE)
+
+    for p, t in (page_norm_text or {}).items():
+        s = str(t or "")
+        has_mbg   = bool(rx_mbg.search(s))
+        has_short = bool(rx_short.search(s))
+        if has_mbg and has_short:
+            spw_map[p] = "BOTH"
+        elif has_mbg:
+            spw_map[p] = "MBG"
+        elif has_short:
+            spw_map[p] = "SHORT"
+        else:
+            spw_map[p] = "UNKNOWN"
+    return spw_map
+
+def _item_page_no(item: dict) -> int | None:
+    """พยายามอ่านเลขหน้าจาก item ที่มาจาก extracted_text_list"""
+    if not isinstance(item, dict):
+        return None
+    return (
+        item.get("page_no")
+        or item.get("page")
+        or item.get("page_number")
+        or item.get("pageIndex")
+        or item.get("page_idx")
+    )
+
 def start_check(df_checklist, extracted_text_list):
-
     logger = logging.getLogger(__name__)
-
     results = []
     grouped = defaultdict(list)
 
@@ -783,12 +824,16 @@ def start_check(df_checklist, extracted_text_list):
         #EN
         "brand logo", "copyright for t&f", "space for date code", "lion mark", "lionmark", "lion-mark", "ce mark", "en 71",
         "ukca", "mc mark", "cib", "argentina logo", "brazilian logo", "italy requirement", "france requirement",
-        "sorting & donation label", "spain sorting symbols", "usa warning statement", "international warning statement",
-        "upc requirement", "list of content : text", "list of content : pictorial", "product’s common", "product's common", "generic name",
+        "sorting & donation label", "spain sorting symbols", "usa warning statement", "product’s common",
+        "upc requirement", "list of content : text", "list of content : pictorial", "product's common", "generic name",
         # TH
         "โลโก้", "ลิขสิทธิ์", "ตรา", "สัญลักษณ์", "เครื่องหมาย",
         "สำรองพื้นที่รหัสวันที่", "เครื่องหมายรับรอง"
     ]
+
+    def _is_spw_spg_requirement(req_text: str) -> bool:
+        s = re.sub(r"\s+", " ", (req_text or "")).strip().lower()
+        return bool(re.search(r"\binternational\s+warning\s+statement\s*[:\-]?\s*sp[wg]\b", s))
 
     # ใช้ Part No. เป็นเกณฑ์หลักในการคัดหน้า artwork 
     PARTNO_RE = re.compile(r"\b[A-Z]{3}\d{2}\b")
@@ -799,6 +844,27 @@ def start_check(df_checklist, extracted_text_list):
         if PARTNO_RE.search(_txt):
             doc_has_any_partno = True
             break
+
+    def _detect_sp_rule_from_row(requirement_text: str, term_lines: list[str]) -> str | None:
+        """
+        คืนค่า 'SPW' | 'SPG' ถ้าแถวนี้เป็นหัวข้อ International warning statement จริง
+        ไม่ใช่ให้คืน None
+        """
+        req_s = normalize_text(requirement_text)
+
+        if "international warning statement" in req_s:
+            if re.search(r"\bspg\b", req_s):
+                return "SPG"
+            if re.search(r"\bspw\b", req_s):
+                return "SPW"
+            
+            joined = " ".join(term_lines).lower()
+            if re.search(r"\bwarning\s*:\s*small\s+parts\s+may\s+be\s+generat", joined):
+                return "SPG"
+            if re.search(r"\bwarning\s*:\s*small\s+parts\b", joined) and not re.search(r"may\s+be\s+generat", joined):
+                return "SPW"
+            return None
+        return None
 
     # คัดหน้า artwork เท่านั้น (ตัดหน้าปก/หน้าไม่ใช่งานศิลป์ออก)
     def is_artwork_page(page_items):
@@ -861,6 +927,8 @@ def start_check(df_checklist, extracted_text_list):
 
     # รวมข้อความแบบ normalize ทั้งหน้า เพื่อจับกรณีประโยคยาวข้ามบรรทัด
     page_norm_text = {}
+    PAGE_LEVEL_TEXTS = page_norm_text
+
     for artwork_index, page_items in enumerate(artwork_pages):
         real_no = page_mapping[artwork_index + 1]
         page_norm_text[real_no] = " ".join(
@@ -873,6 +941,13 @@ def start_check(df_checklist, extracted_text_list):
             text_norm = normalize_text(item.get("text", ""))
             page_number = page_mapping[artwork_index + 1]
             all_texts.append((text_norm, page_number, item))
+
+    page_norm_text_all = {}
+    for real_no, page_items in enumerate(extracted_text_list, start=1):
+        page_norm_text_all[real_no] = " ".join(
+            normalize_text(it.get("text", "")) for it in page_items if (it.get("text"))
+        )
+    spw_by_page = _classify_spw_by_page(page_norm_text_all)
 
     # ---------- Language CODE from PDF CONTENT ----------
     def _tokens_upper(s: str) -> set:
@@ -994,7 +1069,7 @@ def start_check(df_checklist, extracted_text_list):
 
         # HARD SKIP: ถ้าแถวถูกระบุ Manual ใน Excel ให้ข้ามการตรวจทั้งหมด
         raw_verif = (str(row.get("Verification", "")) or "").strip().lower()
-        if raw_verif == "manual":
+        if raw_verif == "manual" and not _is_spw_spg_requirement(requirement):
             grouped[(requirement, spec, "Manual")].append({
                 "Term": term_cell_raw,
                 "Found": "-",
@@ -1021,13 +1096,15 @@ def start_check(df_checklist, extracted_text_list):
         fields_norm = " ".join([req_norm, spec_norm, remark_norm])
 
         is_manual = any(kw in fields_norm for kw in manual_keywords)
+        if _is_spw_spg_requirement(requirement):
+            is_manual = False
 
         # Force manual เมื่อไม่มี term แต่มีภาพ (ไว้รอ OCR ภายหลัง)
-        if not term_lines:
+        if not term_lines and not _is_spw_spg_requirement(requirement):
             is_manual = True
 
         # ถ้ามีภาพ และเจอคำที่ส่อว่าเป็นโลโก้/ลิขสิทธิ์ → Manual
-        if bool(row.get("_HasImage", False)) and any(
+        if bool(row.get("_HasImage", False)) and not _is_spw_spg_requirement(requirement) and any(
             k in fields_norm for k in ["logo", "mark", "symbol", "copyright", "t&f", "t & f", "©", "™", "®"]
         ):
             is_manual = True
@@ -1230,8 +1307,8 @@ def start_check(df_checklist, extracted_text_list):
                 pos = i + len(w)
             return True
 
-        def _match_items_for_variant(variant_norm: str, all_texts, require_thailand: bool=False):
-           
+        def _match_items_for_variant(variant_norm: str, all_texts, require_thailand: bool=False, require_end_boundary: bool=False):
+
             STOPWORDS = {"in","en","na","de","la","el","em","da","do","di","du","of","and","y","et","the","a","an"}
             generic_drop = {"requirement", "address", "code"}
             keep = {"astm", "iso", "en71", "f963", "eu", "us", "uk", "br", "ca", "brazil", "canada", "canadian"}
@@ -1256,29 +1333,46 @@ def start_check(df_checklist, extracted_text_list):
             for text_norm, page_number, item in all_texts:
                 src = (item.get("source") or "pdf").lower()
                 hit = False
+                end_idx = None  
 
                 if age_pat and age_pat.search(text_norm):
+                    m = age_pat.search(text_norm)
                     hit = True
-                if variant_norm and variant_norm in text_norm:
-                    hit = True
-                elif words:
+                    end_idx = m.end()
+
+                if not hit and variant_norm:
+                    j = text_norm.find(variant_norm)
+                    if j != -1:
+                        hit = True
+                        end_idx = j + len(variant_norm)
+
+                if not hit and words:
                     pos, ok = 0, True
+                    end_tmp = None
                     for w in words:
                         i = text_norm.find(w, pos)
                         if i == -1:
                             ok = False; break
-                        pos = i + len(w)
+                        end_tmp = i + len(w)
+                        pos = end_tmp
                     if ok:
                         hit = True
+                        end_idx = end_tmp
 
-                elif risky:
-                    allow_ocr_fuzzy = ( src == "ocr" and len(variant_norm) <= 6)
+                if not hit and risky:
+                    allow_ocr_fuzzy = (src == "ocr" and len(variant_norm) <= 6)
                     if src != "ocr" or allow_ocr_fuzzy:
                         if _fuzzy_ratio(_collapse_ws_hyphen(variant_norm), _collapse_ws_hyphen(text_norm)) >= 0.96:
                             hit = True
+                            end_idx = None
 
                 if hit and require_thailand and not _must_contain_country_th(text_norm):
                     hit = False
+
+                if hit and require_end_boundary and end_idx is not None:
+                    tail = text_norm[end_idx:].lstrip(" \t\u00A0")
+                    if tail and tail[0].isalnum():
+                        hit = False
 
                 if hit:
                     matched_items.append(item)
@@ -1297,7 +1391,7 @@ def start_check(df_checklist, extracted_text_list):
             
             # Page level fallback กรณีข้อความโดนตัดบรรทัดเลยไม่อยู่ใน item เดียว
             if len(words) >= 2:
-                for pno, ptxt in page_norm_text.items():
+                for pno, ptxt in PAGE_LEVEL_TEXTS.items():
                     if pno in pages_set:
                         continue
                     if _tokens_in_order(words, ptxt):
@@ -1325,8 +1419,21 @@ def start_check(df_checklist, extracted_text_list):
                 seen.add(key)
                 out.append(it)
             return out
-
+    
         # VERIFIED SECTION
+        # ตรวจชนิดกฎจาก Requirement: SPW / SPG 
+        req_tag = _detect_sp_rule_from_row(requirement, term_lines)
+        is_sp_rule = req_tag in {"SPW", "SPG"}
+        if "international warning statement" in req_norm:
+            if re.search(r"\bspg\b", req_norm, flags=re.I):
+                req_tag = "SPG"
+            elif re.search(r"\bspw\b", req_norm, flags=re.I):
+                req_tag = "SPW"
+
+        if req_tag is None:
+            joined_term = " ".join(term_lines).lower()
+            req_tag = "SPG" if ("may be generat" in joined_term) else "SPW"
+
         for term in term_lines:
             variants = _split_term_variants(term)
             variants = _expand_made_in_variants(variants, row.get("Language List", []))
@@ -1343,7 +1450,31 @@ def start_check(df_checklist, extracted_text_list):
             for v in variants:
                 v_norm = normalize_text(v)
                 require_th = _extract_th_country_flag(term)
-                items, pages = _match_items_for_variant(v_norm, all_texts, require_thailand=require_th)
+                items, pages = _match_items_for_variant(
+                    v_norm,
+                    all_texts,
+                    require_thailand=require_th,
+                    require_end_boundary=(is_sp_rule and req_tag == "SPW")
+                )
+
+                # ---- page-gating: นับเฉพาะหน้าที่ชนิดตรงกับแถวนั้น ----
+                if is_sp_rule:
+                    if req_tag == "SPW":
+                        allowed = {"SHORT", "BOTH"}
+                    else:  # SPG
+                        allowed = {"MBG", "BOTH"}
+
+                    # cast → set แล้วค่อยใช้ต่อ
+                    pages = {p for p in pages if spw_by_page.get(p) in allowed}
+
+                    def _pg_no(it):
+                        return (it.get("page_no")
+                                or it.get("page")
+                                or it.get("page_number")
+                                or it.get("pageIndex")
+                                or it.get("page_idx"))
+                    items = [it for it in items if (_pg_no(it) is None) or (_pg_no(it) in pages)]
+
                 all_items.extend(items)
                 union_pages.update(pages)
                 score = len(items)
