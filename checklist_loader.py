@@ -17,6 +17,9 @@ TOKEN_RE = re.compile(
     r"[A-Za-z0-9\u00C0-\u024F\u0400-\u04FF\u0E00-\u0E7F]+(?:-[A-Za-z0-9\u00C0-\u024F\u0400-\u04FF\u0E00-\u0E7F]+)?"
 )
 
+# --- SP sentence mode ---
+STRICT_SP_SENTENCE = False  
+
 PAGE_LEVEL_TEXTS = {} 
 
 def _contains_any(s: str, keys) -> bool:
@@ -772,19 +775,28 @@ def load_checklist(excel_path, pdf_filename=None):
 def _classify_spw_by_page(page_norm_text: dict[int, str]) -> dict[int, str]:
     """
     จัดชนิด SP ต่อหน้า:
-      - 'MBG'  : พบ "small parts may be generat..." (ยอมทุกคำสะกดที่ขึ้นต้น generat-)
-      - 'SHORT': พบ "small parts" แบบจบช่วง/จบประโยค โดย "ไม่มี may be generat..." ต่อท้ายติดกัน
-      - 'BOTH' : มีทั้งกรณี MBG และ SHORT อยู่คนละช่วงบนหน้าเดียวกัน
+      - 'MBG'   : พบ "small parts ... may be generat..." (อนุญาตตัวคั่น/ช่องว่าง/ขึ้นบรรทัดสั้น ๆ)
+      - 'SHORT' : พบ "small parts" โดย *ไม่มี* "may be generat..." ต่อท้ายใกล้ ๆ
+      - 'BOTH'  : มีทั้งสองช่วงบนหน้าเดียวกัน
       - 'UNKNOWN': ไม่พบสัญญาณ
     """
     spw_map: dict[int, str] = {}
-    rx_mbg   = re.compile(r"small\s+parts\s+may\s+be\s+generat", re.IGNORECASE)
-    rx_short = re.compile(r"small\s+parts(?!\s+may\s+be\s+generat)", re.IGNORECASE)
+
+    # ยอมช่องว่าง/สัญลักษณ์/ขึ้นบรรทัด/ NBSP ระหว่างคำ ไม่เกิน ~20 ตัว
+    SEP = r"[\s\W]{0,20}"
+
+    if STRICT_SP_SENTENCE:
+        rx_mbg   = re.compile(rf"\bwarning\s*:\s*small{SEP}parts{SEP}may{SEP}be{SEP}generat", re.I)
+        rx_short = re.compile(rf"\bwarning\s*:\s*small{SEP}parts\b(?!{SEP}may{SEP}be{SEP}generat)", re.I)
+    else:
+        rx_mbg   = re.compile(rf"\bsmall\s+parts\b{SEP}may{SEP}be{SEP}generat", re.I)
+        rx_short = re.compile(rf"\bsmall\s+parts\b(?!{SEP}may{SEP}be{SEP}generat)", re.I)
 
     for p, t in (page_norm_text or {}).items():
         s = str(t or "")
         has_mbg   = bool(rx_mbg.search(s))
         has_short = bool(rx_short.search(s))
+
         if has_mbg and has_short:
             spw_map[p] = "BOTH"
         elif has_mbg:
@@ -793,6 +805,7 @@ def _classify_spw_by_page(page_norm_text: dict[int, str]) -> dict[int, str]:
             spw_map[p] = "SHORT"
         else:
             spw_map[p] = "UNKNOWN"
+
     return spw_map
 
 def _item_page_no(item: dict) -> int | None:
@@ -856,9 +869,10 @@ def start_check(df_checklist, extracted_text_list):
                 return "SPW"
             
             joined = " ".join(term_lines).lower()
-            if re.search(r"\bwarning\s*:\s*small\s+parts\s+may\s+be\s+generat", joined):
+            SEP = r"[\s\W]{0,20}"
+            if re.search(rf"\bwarning\s*:\s*small{SEP}parts{SEP}may{SEP}be{SEP}generat", joined):
                 return "SPG"
-            if re.search(r"\bwarning\s*:\s*small\s+parts\b", joined) and not re.search(r"may\s+be\s+generat", joined):
+            if re.search(rf"\bwarning\s*:\s*small{SEP}parts\b(?!{SEP}may{SEP}be{SEP}generat)", joined):
                 return "SPW"
             return None
         return None
