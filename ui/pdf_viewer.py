@@ -110,6 +110,21 @@ def rect_center_inside(target: fitz.Rect, container: fitz.Rect) -> bool:
     cy = (target.y0 + target.y1) * 0.5
     return (container.x0 <= cx <= container.x1) and (container.y0 <= cy <= container.y1)
 
+def _restore_scroll_position(self) -> bool:
+    """Restore scrollbars using previously captured ratios. Return True if applied."""
+    ratios = getattr(self, "_carry_scroll_ratio", None)
+    if not ratios:
+        return False
+    try:
+        h_ratio, v_ratio = ratios
+        hb = self.view.horizontalScrollBar()
+        vb = self.view.verticalScrollBar()
+        hb.setValue(int(h_ratio * hb.maximum()))
+        vb.setValue(int(v_ratio * vb.maximum()))
+        return True
+    except Exception:
+        return False
+
 # ------------------------------ Main Viewer ------------------------------
 class _ZoomableGraphicsView(QGraphicsView):
     def __init__(self, outer_viewer, *a, **kw):
@@ -157,13 +172,15 @@ class PDFViewer(QWidget):
         self._render_again = False
         self._pending_anchor_pdf: Optional[QtCore.QPointF] = None
         self._syncing_pagebar = False
+        self._carry_scroll_ratio = None 
+        self._restore_scroll_after_render = False
 
         # --- auto-fit & debounced zoom ---
-        self._fit_mode = True 
+        self._fit_mode = True
         self._carry_center_ratio = None
         self._zoom_debounce = QtCore.QTimer(self)
         self._zoom_debounce.setSingleShot(True)
-        self._zoom_debounce.setInterval(100)
+        self._zoom_debounce.setInterval(60) 
         self._debounced_zoom_target = None
         self._debounced_zoom_anchor = None
         self._zoom_debounce.timeout.connect(self._apply_debounced_zoom)
@@ -300,9 +317,15 @@ class PDFViewer(QWidget):
 
     # -------------------------- Bottom panel --------------------------
     def _on_filter_changed(self, idx: int):
+        if not getattr(self, "_fit_mode", False):
+            self._capture_center_ratio()
+            self._capture_scroll_position()      
+            self._restore_scroll_after_render = True
         self.filter_mode = ["all", "found", "missing", "manual"][idx]
         self.selected_row_id = None
         self._refresh_bottom_panel()
+        if not getattr(self, "_fit_mode", False):
+            self._apply_carried_center_as_anchor()
         self.render_page()
 
     def _row_status_icon(self, status: str) -> str:
@@ -390,8 +413,17 @@ class PDFViewer(QWidget):
         return [r for r in self.rows if r.get("status") == self.filter_mode]
 
     def _on_select_row(self):
+        if not getattr(self, "_fit_mode", False):
+            self._capture_center_ratio()
+            self._capture_scroll_position()
+            self._restore_scroll_after_render = True
+
         items = self.req_list.selectedItems()
         self.selected_row_id = items[0].data(Qt.UserRole) if items else None
+
+        if not getattr(self, "_fit_mode", False):
+            self._apply_carried_center_as_anchor()
+
         self.render_page()
 
     # -------------------------- Terms & Cache --------------------------
@@ -519,6 +551,9 @@ class PDFViewer(QWidget):
         new_page = max(1, min(self.page_count, int(v))) - 1
         if new_page != self.current_page:
             if not getattr(self, "_fit_mode", False):
+                self._capture_scroll_position()
+                self._restore_scroll_after_render = True
+            if not getattr(self, "_fit_mode", False):
                 self._capture_center_ratio()
             self.current_page = new_page
             if not getattr(self, "_fit_mode", False):
@@ -531,6 +566,8 @@ class PDFViewer(QWidget):
             return
         if not getattr(self, "_fit_mode", False):
             self._capture_center_ratio()
+        self._capture_scroll_position()
+        self._restore_scroll_after_render = True
         if self.current_page > 0:
             self.current_page -= 1
             if not getattr(self, "_fit_mode", False):
@@ -543,6 +580,8 @@ class PDFViewer(QWidget):
             return
         if not getattr(self, "_fit_mode", False):
             self._capture_center_ratio()
+        self._capture_scroll_position()
+        self._restore_scroll_after_render = True
         if self.current_page < self.page_count - 1:
             self.current_page += 1
             if not getattr(self, "_fit_mode", False):
@@ -599,6 +638,32 @@ class PDFViewer(QWidget):
         rx = max(0.0, min(1.0, rx))
         ry = max(0.0, min(1.0, ry))
         self._carry_center_ratio = (rx, ry)
+
+    # === Scroll position helpers (inside class PDFViewer) =========================
+    def _capture_scroll_position(self):
+        """Capture current QGraphicsView scroll ratios (0..1) for both axes."""
+        hb = self.view.horizontalScrollBar()
+        vb = self.view.verticalScrollBar()
+        h_max = hb.maximum()
+        v_max = vb.maximum()
+        h_ratio = 0.0 if h_max <= 0 else (hb.value() / h_max)
+        v_ratio = 0.0 if v_max <= 0 else (vb.value() / v_max)
+        self._carry_scroll_ratio = (h_ratio, v_ratio)
+
+    def _restore_scroll_position(self) -> bool:
+        """Restore scrollbars using previously captured ratios. Return True if applied."""
+        ratios = getattr(self, "_carry_scroll_ratio", None)
+        if not ratios:
+            return False
+        h_ratio, v_ratio = ratios
+        hb = self.view.horizontalScrollBar()
+        vb = self.view.verticalScrollBar()
+        try:
+            hb.setValue(int(h_ratio * hb.maximum()))
+            vb.setValue(int(v_ratio * vb.maximum()))
+            return True
+        except Exception:
+            return False
 
     def _apply_carried_center_as_anchor(self):
         if not self._carry_center_ratio:
@@ -683,16 +748,20 @@ class PDFViewer(QWidget):
                     self.scene.addRect(rr, pen, brush)
 
             # จัดให้อยู่กึ่งกลาง; และถ้าซูมด้วย anchor ให้เล็งไปตำแหน่งนั้น
+            if getattr(self, "_restore_scroll_after_render", False):
+                if self._restore_scroll_position():
+                    pass
+                self._restore_scroll_after_render = False
+                self._pending_anchor_pdf = None  
             if self._pending_anchor_pdf is not None:
                 p = self._pending_anchor_pdf
                 target = QtCore.QPointF(p.x() * self.zoom, p.y() * self.zoom)
                 self.view.centerOn(target)
                 self._pending_anchor_pdf = None
-            else:
+            elif getattr(self, "_fit_mode", False):
                 self.view.centerOn(pix_item)
         finally:
             self._render_busy = False
-
         if self._render_again:
             self._render_again = False
             QTimer.singleShot(0, self.render_page)
