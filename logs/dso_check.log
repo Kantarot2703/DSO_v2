@@ -1,72 +1,72 @@
-2025-09-12 09:25:29,804 | INFO | root | 📂 PDF filename: FLF56_26HW_TEAM_TRANSPORT_2Pk_MIX2_4LB_A2_review.pdf
-2025-09-12 09:25:29,804 | INFO | root | 🧠 Part codes detected: ['4LB']
-2025-09-12 09:25:29,804 | INFO | root | 📄 Sheet names: ['DOM', '4LB', '21A']
-2025-09-12 09:25:29,804 | INFO | root | ✅ Found matching sheet: 4LB
-2025-09-12 09:25:29,804 | INFO | root | 🧾 Header chosen at row 2 | columns: ['Check list', 'Requirement', 'Symbol/  Exact wording', 'Specification', 'Package Panel', 'Procedure']...
-2025-09-12 09:25:29,804 | INFO | root | 🧾 Columns found in sheet: ['Check list', 'Requirement', 'Symbol/  Exact wording', 'Specification', 'Package Panel', 'Procedure', 'Remark', 'Image Match', 'Image Path']
-2025-09-12 09:25:29,804 | INFO | root | 🛟 Fallback columns → Term: Symbol/  Exact wording, Language: None, Spec: Requirement
-2025-09-12 09:25:29,804 | INFO | root | 🔎 ใช้คอลัมน์ Term: Symbol/  Exact wording, Language: None, Spec: Requirement
-2025-09-12 09:25:32,562 | INFO | root | [underline] approx_start_row=3, real_start_row=4
-2025-09-12 09:25:41,953 | INFO | checklist_loader | 📄 Pages considered: 3 (real pages: [1, 2, 3])
-2025-09-12 09:25:41,954 | INFO | checklist_loader | 📄 Artwork-like pages considered: 3 (real pages: [1, 2, 3])
-2025-09-12 09:25:42,157 | INFO | checklist_loader | 🔎 [VERIFY] Term='4LB' | Spec='-'
-2025-09-12 09:25:42,158 | INFO | checklist_loader |     ↳ Pages(evidence)=All Pages | Items=0 (PDF=0, OCR=0, Underline=0, Bold=0)
-2025-09-12 09:25:42,264 | INFO | checklist_loader | 🔎 [VERIFY] Term='3+' | Spec='≥ 3 mm.'
-2025-09-12 09:25:42,265 | INFO | checklist_loader |     ↳ Pages(evidence)=All Pages | Items=0 (PDF=0, OCR=0, Underline=0, Bold=0)
-2025-09-12 09:25:42,265 | INFO | checklist_loader |     [FONT] Spec ≥ 3.00 mm | observed: - (no measurable item)
-2025-09-12 09:25:42,265 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'Product’s common or generic name
+2025-09-12 09:34:50,589 | INFO | root | 📂 PDF filename: FLF56_26HW_TEAM_TRANSPORT_2Pk_MIX2_4LB_A2_review.pdf
+2025-09-12 09:34:50,589 | INFO | root | 🧠 Part codes detected: ['4LB']
+2025-09-12 09:34:50,589 | INFO | root | 📄 Sheet names: ['DOM', '4LB', '21A']
+2025-09-12 09:34:50,589 | INFO | root | ✅ Found matching sheet: 4LB
+2025-09-12 09:34:50,589 | INFO | root | 🧾 Header chosen at row 2 | columns: ['Check list', 'Requirement', 'Symbol/  Exact wording', 'Specification', 'Package Panel', 'Procedure']...
+2025-09-12 09:34:50,589 | INFO | root | 🧾 Columns found in sheet: ['Check list', 'Requirement', 'Symbol/  Exact wording', 'Specification', 'Package Panel', 'Procedure', 'Remark', 'Image Match', 'Image Path']
+2025-09-12 09:34:50,589 | INFO | root | 🛟 Fallback columns → Term: Symbol/  Exact wording, Language: None, Spec: Requirement
+2025-09-12 09:34:50,589 | INFO | root | 🔎 ใช้คอลัมน์ Term: Symbol/  Exact wording, Language: None, Spec: Requirement
+2025-09-12 09:34:55,088 | INFO | root | [underline] approx_start_row=3, real_start_row=4
+2025-09-12 09:35:10,585 | INFO | checklist_loader | 📄 Pages considered: 3 (real pages: [1, 2, 3])
+2025-09-12 09:35:10,585 | INFO | checklist_loader | 📄 Artwork-like pages considered: 3 (real pages: [1, 2, 3])
+2025-09-12 09:35:10,885 | INFO | checklist_loader | 🔎 [VERIFY] Term='4LB' | Spec='-'
+2025-09-12 09:35:10,887 | INFO | checklist_loader |     ↳ Pages(evidence)=All Pages | Items=0 (PDF=0, OCR=0, Underline=0, Bold=0)
+2025-09-12 09:35:11,063 | INFO | checklist_loader | 🔎 [VERIFY] Term='3+' | Spec='≥ 3 mm.'
+2025-09-12 09:35:11,063 | INFO | checklist_loader |     ↳ Pages(evidence)=All Pages | Items=0 (PDF=0, OCR=0, Underline=0, Bold=0)
+2025-09-12 09:35:11,063 | INFO | checklist_loader |     [FONT] Spec ≥ 3.00 mm | observed: - (no measurable item)
+2025-09-12 09:35:11,063 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'Product’s common or generic name
 (Canada)' | Spec: '≥ 1.6 mm.' → Manual verification
-2025-09-12 09:25:42,268 | INFO | checklist_loader | 🔎 [VERIFY] Term='MADE IN THAILAND\nHECHO EN TAILANDIA\nFABRIQUÉ EN THAÏLANDE' | Spec='Bold and All capital letters'
-2025-09-12 09:25:42,268 | INFO | checklist_loader |     ↳ Pages(evidence)=All Pages | Items=1 (PDF=0, OCR=1, Underline=0, Bold=0)
-2025-09-12 09:25:42,268 | INFO | checklist_loader |     [HIT#1] text='HECHO EN TAILANDIA. FABRICADO NA ;' | src=ocr | underline=False | bold=False | size=2.31 mm
-2025-09-12 09:25:42,289 | INFO | checklist_loader | 🔎 [VERIFY] Term='FABRICADO NA TAILÂNDIA' | Spec='Bold and All capital letters'
-2025-09-12 09:25:42,289 | INFO | checklist_loader |     ↳ Pages(evidence)=All Pages | Items=1 (PDF=0, OCR=1, Underline=0, Bold=0)
-2025-09-12 09:25:42,290 | INFO | checklist_loader |     [HIT#1] text='HECHO EN TAILANDIA. FABRICADO NA ;' | src=ocr | underline=False | bold=False | size=2.31 mm
-2025-09-12 09:25:42,402 | INFO | checklist_loader | 🔎 [VERIFY] Term='Imported by/ Importé par: Mattel Canada Inc., Mississauga, Ontario L5R 3W2.' | Spec='≥1.6 mm.  \n(Measure lowercase "o")'
-2025-09-12 09:25:42,402 | INFO | checklist_loader |     ↳ Pages(evidence)=All Pages | Items=0 (PDF=0, OCR=0, Underline=0, Bold=0)
-2025-09-12 09:25:42,402 | INFO | checklist_loader |     [FONT] Spec ≥ 1.60 mm | observed: - (no measurable item)
-2025-09-12 09:25:42,486 | INFO | checklist_loader | 🔎 [VERIFY] Term='Manufactured, imported or distributed by:' | Spec='-'
-2025-09-12 09:25:42,486 | INFO | checklist_loader |     ↳ Pages(evidence)=All Pages | Items=0 (PDF=0, OCR=0, Underline=0, Bold=0)
-2025-09-12 09:25:42,587 | INFO | checklist_loader |     [SALVAGE] added underline evidence from page 1: 'Mattel' (src=ocr, size=2.31 mm)
-2025-09-12 09:25:42,588 | INFO | checklist_loader | 🔎 [VERIFY] Term='Mattel Europa B.V., Gondel 1, 1186 MJ Amstelveen, Nederland.' | Spec='Underline'
-2025-09-12 09:25:42,588 | INFO | checklist_loader |     ↳ Pages(evidence)=All Pages | Items=1 (PDF=0, OCR=1, Underline=1, Bold=0)
-2025-09-12 09:25:42,588 | INFO | checklist_loader |     [HIT#1] text='Mattel' | src=ocr | underline=True | bold=False | size=2.31 mm
-2025-09-12 09:25:42,652 | INFO | checklist_loader | 🔎 [VERIFY] Term='GUARDAR PARA EVENTUAIS CONSULTAS.' | Spec='The statement must be located before the distributor’s or importer’s name and address.'
-2025-09-12 09:25:42,652 | INFO | checklist_loader |     ↳ Pages(evidence)=All Pages | Items=0 (PDF=0, OCR=0, Underline=0, Bold=0)
-2025-09-12 09:25:42,743 | INFO | checklist_loader | 🔎 [VERIFY] Term='CONFORMS TO / CONFORME AUX NORMES DE SÉCURITÉ DE / CUMPLE CON LAS NORMAS DE SEGURIDAD DE ASTM F963.' | Spec='≥  2 mm.'
-2025-09-12 09:25:42,744 | INFO | checklist_loader |     ↳ Pages(evidence)=All Pages | Items=0 (PDF=0, OCR=0, Underline=0, Bold=0)
-2025-09-12 09:25:42,744 | INFO | checklist_loader |     [FONT] Spec ≥ 2.00 mm | observed: - (no measurable item)
-2025-09-12 09:25:42,745 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'Canada requirement
+2025-09-12 09:35:11,111 | INFO | checklist_loader | 🔎 [VERIFY] Term='MADE IN THAILAND\nHECHO EN TAILANDIA\nFABRIQUÉ EN THAÏLANDE' | Spec='Bold and All capital letters'
+2025-09-12 09:35:11,111 | INFO | checklist_loader |     ↳ Pages(evidence)=All Pages | Items=1 (PDF=0, OCR=1, Underline=0, Bold=0)
+2025-09-12 09:35:11,111 | INFO | checklist_loader |     [HIT#1] text='HECHO EN TAILANDIA. FABRICADO NA ;' | src=ocr | underline=False | bold=False | size=2.31 mm
+2025-09-12 09:35:11,126 | INFO | checklist_loader | 🔎 [VERIFY] Term='FABRICADO NA TAILÂNDIA' | Spec='Bold and All capital letters'
+2025-09-12 09:35:11,127 | INFO | checklist_loader |     ↳ Pages(evidence)=All Pages | Items=1 (PDF=0, OCR=1, Underline=0, Bold=0)
+2025-09-12 09:35:11,127 | INFO | checklist_loader |     [HIT#1] text='HECHO EN TAILANDIA. FABRICADO NA ;' | src=ocr | underline=False | bold=False | size=2.31 mm
+2025-09-12 09:35:11,353 | INFO | checklist_loader | 🔎 [VERIFY] Term='Imported by/ Importé par: Mattel Canada Inc., Mississauga, Ontario L5R 3W2.' | Spec='≥1.6 mm.  \n(Measure lowercase "o")'
+2025-09-12 09:35:11,353 | INFO | checklist_loader |     ↳ Pages(evidence)=All Pages | Items=0 (PDF=0, OCR=0, Underline=0, Bold=0)
+2025-09-12 09:35:11,353 | INFO | checklist_loader |     [FONT] Spec ≥ 1.60 mm | observed: - (no measurable item)
+2025-09-12 09:35:11,464 | INFO | checklist_loader | 🔎 [VERIFY] Term='Manufactured, imported or distributed by:' | Spec='-'
+2025-09-12 09:35:11,464 | INFO | checklist_loader |     ↳ Pages(evidence)=All Pages | Items=0 (PDF=0, OCR=0, Underline=0, Bold=0)
+2025-09-12 09:35:11,634 | INFO | checklist_loader |     [SALVAGE] added underline evidence from page 1: 'Mattel' (src=ocr, size=2.31 mm)
+2025-09-12 09:35:11,634 | INFO | checklist_loader | 🔎 [VERIFY] Term='Mattel Europa B.V., Gondel 1, 1186 MJ Amstelveen, Nederland.' | Spec='Underline'
+2025-09-12 09:35:11,634 | INFO | checklist_loader |     ↳ Pages(evidence)=All Pages | Items=1 (PDF=0, OCR=1, Underline=1, Bold=0)
+2025-09-12 09:35:11,634 | INFO | checklist_loader |     [HIT#1] text='Mattel' | src=ocr | underline=True | bold=False | size=2.31 mm
+2025-09-12 09:35:11,770 | INFO | checklist_loader | 🔎 [VERIFY] Term='GUARDAR PARA EVENTUAIS CONSULTAS.' | Spec='The statement must be located before the distributor’s or importer’s name and address.'
+2025-09-12 09:35:11,770 | INFO | checklist_loader |     ↳ Pages(evidence)=All Pages | Items=0 (PDF=0, OCR=0, Underline=0, Bold=0)
+2025-09-12 09:35:11,947 | INFO | checklist_loader | 🔎 [VERIFY] Term='CONFORMS TO / CONFORME AUX NORMES DE SÉCURITÉ DE / CUMPLE CON LAS NORMAS DE SEGURIDAD DE ASTM F963.' | Spec='≥  2 mm.'
+2025-09-12 09:35:11,947 | INFO | checklist_loader |     ↳ Pages(evidence)=All Pages | Items=0 (PDF=0, OCR=0, Underline=0, Bold=0)
+2025-09-12 09:35:11,947 | INFO | checklist_loader |     [FONT] Spec ≥ 2.00 mm | observed: - (no measurable item)
+2025-09-12 09:35:11,963 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'Canada requirement
 (Canada)' | Spec: '-' → Manual verification
-2025-09-12 09:25:42,745 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'Space for Date code
+2025-09-12 09:35:11,963 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'Space for Date code
 (All markets)' | Spec: 'Must not cover any text and illustration' → Manual verification
-2025-09-12 09:25:42,746 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'Lion mark
+2025-09-12 09:35:11,965 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'Lion mark
 (All markets)' | Spec: '≥ 5 mm.' → Manual verification
-2025-09-12 09:25:42,746 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'CE mark
+2025-09-12 09:35:11,966 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'CE mark
 (All markets)' | Spec: '≥ 5 mm.' → Manual verification
-2025-09-12 09:25:42,746 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'UKCA mark
+2025-09-12 09:35:11,966 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'UKCA mark
 (All markets)' | Spec: '≥ 5 mm.' → Manual verification
-2025-09-12 09:25:42,747 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'MC  mark
+2025-09-12 09:35:11,966 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'MC  mark
 (All markets)' | Spec: '≥ 5x5 mm.
 (Exclude numbers under MC )' → Manual verification
-2025-09-12 09:25:42,747 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'CIB: Consumer Information Block
+2025-09-12 09:35:11,966 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'CIB: Consumer Information Block
 (All markets)' | Spec: 'must be located near the legal copy' → Manual verification
-2025-09-12 09:25:42,747 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'Argentina logo
+2025-09-12 09:35:11,966 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'Argentina logo
 (Argentina)' | Spec: '≥ 12. 5 mm.' → Manual verification
-2025-09-12 09:25:42,748 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'Brazilian logo
+2025-09-12 09:35:11,966 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'Brazilian logo
 (Brazil)' | Spec: '≥ 20 mm.
 ( largest panel is < 278.75 cm2)' → Manual verification
-2025-09-12 09:25:42,748 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'Waste Sorting Information
+2025-09-12 09:35:11,966 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'Waste Sorting Information
 (Italy)' | Spec: 'The letter abbreviation and number code ≥ 1.2 mm.' → Manual verification
-2025-09-12 09:25:42,748 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'Waste Sorting Information
+2025-09-12 09:35:11,971 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'Waste Sorting Information
 (France)' | Spec: 'The "FR" tab font must be “ Flama condensed bold”  and text height must be ≥ 1.26 mm and all caps.' → Manual verification
-2025-09-12 09:25:42,748 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'Waste Sorting Information
+2025-09-12 09:35:11,971 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'Waste Sorting Information
 (France)' | Spec: 'The Triman logo height must be ≥ 10 mm.
  when space is limited can be used minimum size 6 mm.' → Manual verification
-2025-09-12 09:25:42,749 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'Sorting & Donation Label
+2025-09-12 09:35:11,972 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'Sorting & Donation Label
 (France)' | Spec: 'Standard Dimensions: The Triman logo height must be ≥ 10 mm.
 Compact Dimensions: The Triman logo height must be ≥ 6 mm.' → Manual verification
-2025-09-12 09:25:42,750 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'Sorting Symbols
+2025-09-12 09:35:11,972 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'Sorting Symbols
 (Spain)' | Spec: 'Single Material;
 Limited space: The height of symbol must be ≥ 8 mm
 Available space: The height of symbol must be ≥ 10 mm
@@ -74,40 +74,40 @@ Available space: The height of symbol must be ≥ 10 mm
 Multi-Material;
 Limited space: The height of symbol must be ≥ 8 mm
 Available space: The height of symbol must be ≥ 10 mm' → Manual verification
-2025-09-12 09:25:42,751 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'Warning statement: SPW
+2025-09-12 09:35:11,974 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'Warning statement: SPW
 (USA)' | Spec: 'Size as remark column' → Manual verification
-2025-09-12 09:25:42,802 | INFO | checklist_loader | 🔎 [VERIFY] Term='WARNING: Small parts.' | Spec='≥ 1.5 mm'
-2025-09-12 09:25:42,802 | INFO | checklist_loader |     ↳ Pages(evidence)=- | Items=0 (PDF=0, OCR=0, Underline=0, Bold=0)
-2025-09-12 09:25:42,802 | INFO | checklist_loader |     [FONT] Spec ≥ 1.50 mm | observed: - (no measurable item)
-2025-09-12 09:25:43,037 | INFO | checklist_loader | 🔎 [VERIFY] Term='ADVERTENCIA: PELIGRO DE ATRAGANTAMIENTO. Juguete no recomendado para menores de 3 años, porque contiene piezas pequeñas que\npodrían provocar asfixia en caso de ser ingeridas o inhaladas por el/la niño/a.' | Spec='Uppercase ≥ 2 mm.\nLowercase ≥ 1.5 mm.'
-2025-09-12 09:25:43,037 | INFO | checklist_loader |     ↳ Pages(evidence)=- | Items=0 (PDF=0, OCR=0, Underline=0, Bold=0)
-2025-09-12 09:25:43,037 | INFO | checklist_loader |     [FONT] Spec ≥ 2.00 mm | observed: - (no measurable item)
-2025-09-12 09:25:43,090 | INFO | checklist_loader | 🔎 [VERIFY] Term='ATTENTION : Petits éléments.' | Spec='Uppercase ≥ 2 mm.\nLowercase ≥ 1.5 mm.'
-2025-09-12 09:25:43,090 | INFO | checklist_loader |     ↳ Pages(evidence)=- | Items=0 (PDF=0, OCR=0, Underline=0, Bold=0)
-2025-09-12 09:25:43,090 | INFO | checklist_loader |     [FONT] Spec ≥ 2.00 mm | observed: - (no measurable item)
-2025-09-12 09:25:43,321 | INFO | checklist_loader | 🔎 [VERIFY] Term='ATENÇÃO: NÃO INDICADO / NÃO RECOMENDÁVEL PARA CRIANÇAS MENORES\nDE 3 (TRÊS) ANOS POR CONTER PARTE(S) PEQUENA(S) QUE PODE(M) SER\nENGOLIDA(S) OU ASPIRADA(S) PODENDO PROVOCAR ASFIXIA.' | Spec='Uppercase ≥ 2 mm.'
-2025-09-12 09:25:43,321 | INFO | checklist_loader |     ↳ Pages(evidence)=- | Items=0 (PDF=0, OCR=0, Underline=0, Bold=0)
-2025-09-12 09:25:43,321 | INFO | checklist_loader |     [FONT] Spec ≥ 2.00 mm | observed: - (no measurable item)
-2025-09-12 09:25:43,391 | INFO | checklist_loader | 🔎 [VERIFY] Term='WARNING: Small parts may be generated.' | Spec='-'
-2025-09-12 09:25:43,391 | INFO | checklist_loader |     ↳ Pages(evidence)=All Pages | Items=1 (PDF=1, OCR=0, Underline=0, Bold=0)
-2025-09-12 09:25:43,392 | INFO | checklist_loader |     [HIT#1] text='WARNING: Small parts may be generated.' | src=pdf | underline=False | bold=False | size=3.17 mm
-2025-09-12 09:25:43,620 | INFO | checklist_loader | 🔎 [VERIFY] Term='ADVERTENCIA: Juguete no recomendado para menores de 3 años. Puede generar piezas pequeñas que podrían\nprovocar asfixia en caso de ser ingeridas por el niño/a.' | Spec='-'
-2025-09-12 09:25:43,621 | INFO | checklist_loader |     ↳ Pages(evidence)=All Pages | Items=107 (PDF=13, OCR=94, Underline=22, Bold=0)
-2025-09-12 09:25:43,621 | INFO | checklist_loader |     [HIT#1] text='provocar asfixia en caso de ser ingeridas por el niño/a.' | src=pdf | underline=False | bold=False | size=3.17 mm
-2025-09-12 09:25:43,621 | INFO | checklist_loader |     [HIT#2] text='EN THAILANDE. HECHO EN TAILANDIA. FABRICADO NA TAILANDIA. Mattel Canada Inc., Mi' | src=ocr | underline=True | bold=False | size=6.65 mm
-2025-09-12 09:25:43,622 | INFO | checklist_loader |     [HIT#3] text='Pdte. Riesco S.A., . ATTENTION' | src=ocr | underline=False | bold=False | size=5.43 mm
-2025-09-12 09:25:43,624 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'UPC requirement
+2025-09-12 09:35:12,070 | INFO | checklist_loader | 🔎 [VERIFY] Term='WARNING: Small parts.' | Spec='≥ 1.5 mm'
+2025-09-12 09:35:12,070 | INFO | checklist_loader |     ↳ Pages(evidence)=- | Items=0 (PDF=0, OCR=0, Underline=0, Bold=0)
+2025-09-12 09:35:12,071 | INFO | checklist_loader |     [FONT] Spec ≥ 1.50 mm | observed: - (no measurable item)
+2025-09-12 09:35:12,452 | INFO | checklist_loader | 🔎 [VERIFY] Term='ADVERTENCIA: PELIGRO DE ATRAGANTAMIENTO. Juguete no recomendado para menores de 3 años, porque contiene piezas pequeñas que\npodrían provocar asfixia en caso de ser ingeridas o inhaladas por el/la niño/a.' | Spec='Uppercase ≥ 2 mm.\nLowercase ≥ 1.5 mm.'
+2025-09-12 09:35:12,452 | INFO | checklist_loader |     ↳ Pages(evidence)=- | Items=0 (PDF=0, OCR=0, Underline=0, Bold=0)
+2025-09-12 09:35:12,452 | INFO | checklist_loader |     [FONT] Spec ≥ 2.00 mm | observed: - (no measurable item)
+2025-09-12 09:35:12,571 | INFO | checklist_loader | 🔎 [VERIFY] Term='ATTENTION : Petits éléments.' | Spec='Uppercase ≥ 2 mm.\nLowercase ≥ 1.5 mm.'
+2025-09-12 09:35:12,571 | INFO | checklist_loader |     ↳ Pages(evidence)=- | Items=0 (PDF=0, OCR=0, Underline=0, Bold=0)
+2025-09-12 09:35:12,572 | INFO | checklist_loader |     [FONT] Spec ≥ 2.00 mm | observed: - (no measurable item)
+2025-09-12 09:35:12,975 | INFO | checklist_loader | 🔎 [VERIFY] Term='ATENÇÃO: NÃO INDICADO / NÃO RECOMENDÁVEL PARA CRIANÇAS MENORES\nDE 3 (TRÊS) ANOS POR CONTER PARTE(S) PEQUENA(S) QUE PODE(M) SER\nENGOLIDA(S) OU ASPIRADA(S) PODENDO PROVOCAR ASFIXIA.' | Spec='Uppercase ≥ 2 mm.'
+2025-09-12 09:35:12,975 | INFO | checklist_loader |     ↳ Pages(evidence)=- | Items=0 (PDF=0, OCR=0, Underline=0, Bold=0)
+2025-09-12 09:35:12,975 | INFO | checklist_loader |     [FONT] Spec ≥ 2.00 mm | observed: - (no measurable item)
+2025-09-12 09:35:13,100 | INFO | checklist_loader | 🔎 [VERIFY] Term='WARNING: Small parts may be generated.' | Spec='-'
+2025-09-12 09:35:13,101 | INFO | checklist_loader |     ↳ Pages(evidence)=All Pages | Items=1 (PDF=1, OCR=0, Underline=0, Bold=0)
+2025-09-12 09:35:13,101 | INFO | checklist_loader |     [HIT#1] text='WARNING: Small parts may be generated.' | src=pdf | underline=False | bold=False | size=3.17 mm
+2025-09-12 09:35:13,459 | INFO | checklist_loader | 🔎 [VERIFY] Term='ADVERTENCIA: Juguete no recomendado para menores de 3 años. Puede generar piezas pequeñas que podrían\nprovocar asfixia en caso de ser ingeridas por el niño/a.' | Spec='-'
+2025-09-12 09:35:13,459 | INFO | checklist_loader |     ↳ Pages(evidence)=All Pages | Items=107 (PDF=13, OCR=94, Underline=22, Bold=0)
+2025-09-12 09:35:13,459 | INFO | checklist_loader |     [HIT#1] text='provocar asfixia en caso de ser ingeridas por el niño/a.' | src=pdf | underline=False | bold=False | size=3.17 mm
+2025-09-12 09:35:13,459 | INFO | checklist_loader |     [HIT#2] text='EN THAILANDE. HECHO EN TAILANDIA. FABRICADO NA TAILANDIA. Mattel Canada Inc., Mi' | src=ocr | underline=True | bold=False | size=6.65 mm
+2025-09-12 09:35:13,459 | INFO | checklist_loader |     [HIT#3] text='Pdte. Riesco S.A., . ATTENTION' | src=ocr | underline=False | bold=False | size=5.43 mm
+2025-09-12 09:35:13,459 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'UPC requirement
 (All markets)' | Spec: 'Size of UPC Barcode depend on area panel' → Manual verification
-2025-09-12 09:25:43,625 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'List of content : Text
+2025-09-12 09:35:13,459 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'List of content : Text
 (All market)' | Spec: 'All markets
 - open package = no need list of content
 - close package = need list of content' → Manual verification
-2025-09-12 09:25:43,625 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'List of content : Text
+2025-09-12 09:35:13,459 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'List of content : Text
 (Brazil)' | Spec: 'Brazil : The word “CONTEÚDO:” and the numerical portion (quantity) of the list of contents must meet the text height requirement per Table' → Manual verification
-2025-09-12 09:25:43,626 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'List of content : Text
+2025-09-12 09:35:13,459 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'List of content : Text
 (Canada)' | Spec: 'Canada : The text ≥ 1.6 mm.
 The number must be in bold and must meet the height requirement per table as below.' → Manual verification
-2025-09-12 09:25:43,627 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'List of content : 
+2025-09-12 09:35:13,459 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'List of content : 
 pictorial
 (All markets)' | Spec: 'Must have text above picture at least 4 languages (English, French, Brazilian Portuguese, Russian)
 
@@ -116,5 +116,5 @@ The word “CONTEÚDO:” and the numerical portion (quantity) of the list of co
 
 Canada : 
 Any additional languages on the package must not be displayed with greater prominence than the French. So the translation of French must equal Brazilian Portuguese.' → Manual verification
-2025-09-12 09:25:43,628 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'Instruction of Play function feature
+2025-09-12 09:35:13,459 | INFO | checklist_loader | 🟨 [MANUAL] Req: 'Instruction of Play function feature
 (All markets)' | Spec: '-' → Manual verification

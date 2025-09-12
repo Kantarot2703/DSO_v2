@@ -594,6 +594,8 @@ class PDFViewer(QWidget):
             return
         if not getattr(self, "_fit_mode", False):
             self._capture_center_ratio()
+            self._capture_scroll_position()
+            self._restore_scroll_after_render = True
         self.current_page = (self.current_page - 1) % self.page_count
         if not getattr(self, "_fit_mode", False):
             self._apply_carried_center_as_anchor()
@@ -605,6 +607,8 @@ class PDFViewer(QWidget):
             return
         if not getattr(self, "_fit_mode", False):
             self._capture_center_ratio()
+            self._capture_scroll_position()
+            self._restore_scroll_after_render = True
         self.current_page = (self.current_page + 1) % self.page_count
         if not getattr(self, "_fit_mode", False):
             self._apply_carried_center_as_anchor()
