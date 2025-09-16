@@ -1,5 +1,6 @@
 import re
 import fitz  
+import logging
 from PIL import Image as _PIL_Image
 
 
@@ -845,6 +846,14 @@ def extract_text_by_page(pdf_path, enable_ocr=True, ocr_lang="eng+tha", ocr_only
 
     doc = fitz.open(pdf_path)
 
+    # ใช้ normalize สำหรับตรวจ SPW/SPG บนชั้นข้อความ PDF (ภายในฟังก์ชันนี้)
+    def _norm_sp(s: str) -> str:
+        s = "" if s is None else str(s)
+        s = s.replace("\u00A0", " ")            
+        s = s.replace("‐", "-").replace("–", "-").replace("—", "-")
+        s = re.sub(r"\s+", " ", s).strip().lower()
+        return s
+
     try:
         all_pages = []
 
@@ -1012,10 +1021,27 @@ def extract_text_by_page(pdf_path, enable_ocr=True, ocr_lang="eng+tha", ocr_only
                     has_images = False
 
                 do_ocr = True
+
+                base_skip = False
+                force_sp_ocr = False
+
                 if ocr_only_suspect_pages and not has_images:
                     enough_items = len(page_items) >= 5
                     has_readable_size = any((it.get("size_mm") or 0) >= 1.0 for it in page_items)
-                    do_ocr = not (enough_items and has_readable_size)
+                    base_skip = (enough_items and has_readable_size)
+
+                    # บังคับ OCR เฉพาะหน้า "เสี่ยง SP":
+                    # มี small parts บน text-layer แต่ยังไม่เห็น may be generat...
+                    # หรือพบหัวข้อ International warning statement
+                    texts_join = " ".join(_norm_sp(it.get("text", "")) for it in page_items if it.get("text"))
+                    has_small_parts  = ("small parts" in texts_join)
+                    has_mbg_keyword  = ("small parts may be generat" in texts_join)
+                    has_iws_heading  = ("international warning statement" in texts_join)
+
+                    force_sp_ocr = (has_small_parts and not has_mbg_keyword) or has_iws_heading
+
+                # สรุปว่าจะ OCR ไหม (ครอบคลุมทุกกรณี)
+                do_ocr = (not base_skip) or force_sp_ocr
 
                 if do_ocr:
                     fast_zooms   = [2.6, 3.0]

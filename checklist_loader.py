@@ -1080,7 +1080,7 @@ def start_check(df_checklist, extracted_text_list):
 
         # HARD SKIP: ถ้าแถวถูกระบุ Manual ใน Excel ให้ข้ามการตรวจทั้งหมด
         raw_verif = (str(row.get("Verification", "")) or "").strip().lower()
-        if raw_verif == "manual" and not _is_spw_spg_requirement(requirement):
+        if raw_verif == "manual":
             grouped[(requirement, spec, "Manual")].append({
                 "Term": term_cell_raw,
                 "Found": "-",
@@ -1108,7 +1108,7 @@ def start_check(df_checklist, extracted_text_list):
 
         is_manual = any(kw in fields_norm for kw in manual_keywords)
         if _is_spw_spg_requirement(requirement):
-            is_manual = False
+            is_manual = True
 
         # Force manual เมื่อไม่มี term แต่มีภาพ (ไว้รอ OCR ภายหลัง)
         if not term_lines and not _is_spw_spg_requirement(requirement):
@@ -1835,13 +1835,15 @@ def start_check(df_checklist, extracted_text_list):
                      both.str.contains(r"\bspg\b", regex=True)
 
             # ฟังก์ชันตัดสิน "แถวนี้เจอจริงไหม"
+            VER_COL = "Verification" if "Verification" in df_result.columns else None
+
             def _row_is_found(row) -> bool:
+                if VER_COL and str(row.get(VER_COL, "")).strip().lower() == "manual":
+                    return True
                 if FOUND_COL:
                     f = str(row.get(FOUND_COL, "")).strip()
-                    if f.startswith("✅"):
-                        return True
-                    if f.startswith("❌"):
-                        return False
+                    if f.startswith("✅"): return True
+                    if f.startswith("❌"): return False
                 v = row.get(PAGES_COL, None)
                 if v is None:
                     return False
