@@ -73,6 +73,7 @@ def _hide_empty_sp_group_ui(df):
         REQ_COL   = "Requirement"
         PAGES_COL = "Pages"
         FOUND_COL = "Found" if "Found" in cols else None
+        VER_COL = "Verification" if "Verification" in cols else None
 
         def _norm(s: str) -> str:
             # normalize: NFKC, lower, collapse spaces, unify dashes
@@ -99,6 +100,8 @@ def _hide_empty_sp_group_ui(df):
             return s not in ("", "-", "—", "none", "0")
 
         def _row_found(row) -> bool:
+            if VER_COL and str(row.get(VER_COL, "")).strip().lower() == "manual":
+                return True
             if FOUND_COL:
                 f = str(row.get(FOUND_COL, "")).strip()
                 if f.startswith("✅"):
