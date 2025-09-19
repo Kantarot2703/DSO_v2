@@ -1,0 +1,14 @@
+﻿# venv
+.venv/
+
+# Python caches
+__pycache__/
+*.pyc
+
+# logs
+logs/
+*.log
+
+# build/output
+dist/
+build/
